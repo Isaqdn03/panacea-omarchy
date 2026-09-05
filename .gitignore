@@ -1,0 +1,10 @@
+# Runtime state and rescue copies that must never be committed.
+*.bak
+*.bak.*
+*.prepatch
+*.orig
+panacea/.vibrance
+
+# Never commit the live settings file by hand -- it carries the weather API key.
+# The sanitised copy at panacea/settings.json is tracked; use ./sync.sh to update it.
+settings.json.live

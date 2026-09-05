@@ -1,0 +1,20 @@
+#!/bin/bash
+# Mirror Omarchy's current background into ~/.config/hypr/wallpaper.conf.
+#
+# Panacea treats that file as its wallpaper state: shell.qml's FileView, lock.qml,
+# scripts/lock.sh and scripts/themes.sh all read `$wallpaper = <path>` out of it.
+# Omarchy never creates it, so without this the pill logs a read error at startup
+# and its lock screen comes up with no image.
+#
+# Fired by omarchy-theme-set. Note that cycling backgrounds inside one theme
+# (omarchy-theme-bg-next) fires no hook, so this can lag until the next theme change.
+
+set -u
+
+link="$HOME/.local/state/omarchy/current/background"
+conf="$HOME/.config/hypr/wallpaper.conf"
+
+bg=$(readlink -f "$link" 2>/dev/null) || exit 0
+[ -n "$bg" ] && [ -f "$bg" ] || exit 0
+
+printf '$wallpaper = %s\n' "$bg" >"$conf"

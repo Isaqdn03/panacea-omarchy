@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Refuse any commit that would publish an OpenWeather API key.
+#
+# panacea/settings.json is tracked with `weatherKey` blank, but the running pill
+# rewrites the live file constantly -- so a stray `cp` or `git add` from the live
+# config is the realistic way the key ends up in a public repo. Use ./sync.sh,
+# which blanks it every time. This hook is the backstop for when you don't.
+set -euo pipefail
+
+# Capture the diff before matching. Under `set -o pipefail`, `... | grep -q` returns
+# FAILURE when grep matches and exits early (SIGPIPE upstream) -- which would make
+# this guard silently pass exactly the commit it exists to block.
+staged="$(git diff --cached -U0 || true)"
+if grep -qE '^\+.*"weatherKey"[[:space:]]*:[[:space:]]*"[0-9a-f]{16,}"' <<<"$staged"; then
+    cat >&2 <<'MSG'
+
+  BLOCKED: a non-empty "weatherKey" is staged.
+
+  This repo is public. Blank it before committing:
+
+      jq -S --indent 4 '.weatherKey = "" | .weatherCity = ""' \
+        panacea/settings.json > /tmp/s.json && mv /tmp/s.json panacea/settings.json
+
+  Or just run ./sync.sh, which does it for you.
+
+MSG
+    exit 1
+fi

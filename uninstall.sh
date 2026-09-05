@@ -1,0 +1,120 @@
+#!/usr/bin/env bash
+#
+# Undo install.sh: bring the Omarchy bar back and unwire the pill.
+#
+#   ./uninstall.sh           unwire; leave ~/.config/panacea on disk
+#   ./uninstall.sh --purge   also delete ~/.config/panacea
+set -euo pipefail
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/panacea"
+HYPR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
+OMA="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
+QSDIR="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell"
+STATUSLINE="$HOME/.claude/statusline-command.sh"
+
+PURGE=0
+[ "${1:-}" = "--purge" ] && PURGE=1
+
+bold=$'\033[1m'; dim=$'\033[2m'; grn=$'\033[32m'; ylw=$'\033[33m'; rst=$'\033[0m'
+step() { printf '%s==>%s %s\n' "$bold" "$rst" "$*"; }
+did()  { printf '    %s-%s %s\n' "$grn" "$rst" "$*"; }
+skip() { printf '    %s·%s %s\n' "$dim" "$rst" "$*"; }
+warn() { printf '    %s!%s %s\n' "$ylw" "$rst" "$*"; }
+
+# Strip a marker-fenced block, and only that. A block added by hand before the
+# markers existed is left alone and reported, because guessing its extent from
+# content would risk eating the lines around it.
+strip_block() {
+    local file="$1" name="$2" sentinel="$3"
+    [ -f "$file" ] || { skip "$file absent"; return; }
+    if grep -q '>>> panacea-omarchy >>>' "$file"; then
+        python3 - "$file" <<'PY'
+import sys
+
+# Line-based on purpose. A regex here is a data-loss bug waiting to happen: with
+# re.DOTALL, `^.*<open marker>` happily spans from the top of the file to the
+# marker and takes every line above it with it. Scan and drop instead.
+path = sys.argv[1]
+OPEN, CLOSE = ">>> panacea-omarchy >>>", "<<< panacea-omarchy <<<"
+
+out, inside, removed = [], False, 0
+for line in open(path, encoding="utf-8").readlines():
+    if not inside and OPEN in line:
+        inside = True
+        removed += 1
+        continue
+    if inside:
+        if CLOSE in line:
+            inside = False
+        continue
+    out.append(line)
+
+if inside:
+    raise SystemExit(f"unterminated panacea-omarchy block in {path}; not touching it")
+if not removed:
+    raise SystemExit(f"no block found in {path}")
+
+# install.sh prefixes each block with a blank line; drop the trailing blanks it
+# leaves behind, but keep the file ending in exactly one newline.
+while out and out[-1].strip() == "":
+    out.pop()
+text = "".join(out)
+if text and not text.endswith("\n"):
+    text += "\n"
+open(path, "w", encoding="utf-8").write(text)
+PY
+        did "removed the $name block from $(basename "$file")"
+    elif grep -qE "$sentinel" "$file"; then
+        warn "$(basename "$file") has $name but no markers — remove it by hand:"
+        grep -nE "$sentinel" "$file" | sed 's/^/        /'
+    else
+        skip "no $name in $(basename "$file")"
+    fi
+}
+
+step "Stopping the pill"
+pgrep -x qs >/dev/null && { pkill -x qs || true; did "pill stopped"; } || skip "pill not running"
+
+step "Unwiring Hyprland"
+strip_block "$HYPR/autostart.lua" "autostart" 'launch_on_start\("qs -c panacea"\)'
+strip_block "$HYPR/bindings.lua"  "keybind"   'ipc call pill github'
+
+step "Removing the Quickshell link and wallpaper hook"
+if [ -L "$QSDIR/panacea" ]; then
+    unlink "$QSDIR/panacea"; did "removed $QSDIR/panacea"
+else
+    skip "no symlink"
+fi
+HOOK="$OMA/hooks/theme-set.d/20-panacea-wallpaper.hook"
+if [ -f "$HOOK" ]; then
+    unlink "$HOOK"; did "removed the wallpaper hook"
+else
+    skip "no wallpaper hook"
+fi
+
+step "Claude statusline"
+# Never delete the file: it is the user's Claude Code statusline, not ours, and
+# removing it would silently break their status line. Only the block goes.
+strip_block "$STATUSLINE" "usage-cache" 'panacea-claude-usage.json'
+
+step "Restoring the Omarchy bar"
+# Inverted flag: `off` means "bar-off off", i.e. the bar comes back.
+if command -v omarchy >/dev/null; then
+    omarchy toggle bar off || true
+    did "Omarchy bar restored"
+else
+    warn "omarchy not on PATH — run: omarchy toggle bar off"
+fi
+
+if [ "$PURGE" = 1 ]; then
+    step "Purging the config"
+    # Guard the path before recursing: a bad expansion here would be unrecoverable.
+    case "$CONF" in
+        */panacea) [ -d "$CONF" ] && command rm -r -- "$CONF" && did "removed $CONF" ;;
+        *) warn "refusing to delete an unexpected path: $CONF" ;;
+    esac
+else
+    skip "left $CONF in place (--purge to delete)"
+fi
+
+printf '\n%sDone.%s Log out and back in, or run `hyprctl reload`, to settle Hyprland.\n' "$grn" "$rst"
