@@ -96,6 +96,155 @@ known_networks() {
         | sed 's/[[:space:]]*$//'
 }
 
+# ---------------------------------------------------------- PANACEA-LOCAL
+# На этой машине сетями заведует NetworkManager, а iwd снесён вместе с
+# iwctl. Всё, что ниже, спрашивало именно у iwctl — и молча получало
+# пустоту: `list` не выдавал ни строки, и меню показывало «Сети не
+# найдены» при живом, подключённом и прекрасно работающем Wi-Fi.
+#
+# Отсюда — ветка на nmcli, которая включается, только когда NetworkManager
+# действительно запущен. Она берёт на себя ровно те команды, что упирались
+# в iwctl; `status` оставлен общему коду ниже — он читает состояние у ядра
+# через `iw` и работает при любом менеджере.
+if command -v nmcli >/dev/null 2>&1 \
+   && [ "$(nmcli -t -f RUNNING general 2>/dev/null)" = "running" ]; then
+
+    # Интерфейс спрашиваем у самого NetworkManager: связанный, а если связи
+    # нет ни у одного — первый беспроводной.
+    nm_iface() {
+        [ -n "${WIFI_IFACE:-}" ] && { printf '%s' "$WIFI_IFACE"; return; }
+        nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | awk -F: '
+            $2 == "wifi" {
+                if ($3 == "connected") { print $1; done = 1; exit }
+                if (first == "") first = $1
+            }
+            END { if (!done && first != "") print first }'
+    }
+    NMIF="$(nm_iface)"
+
+    # В терсе nmcli экранирует двоеточия обратным слешем — снимаем.
+    nm_unesc() { sed 's/\\\(.\)/\1/g'; }
+
+    # UUID сохранённых беспроводных профилей.
+    nm_saved() {
+        nmcli -t -f UUID,TYPE connection show 2>/dev/null \
+            | awk -F: '$2 == "802-11-wireless" { print $1 }'
+    }
+
+    # SSID сохранённых сетей. Имя профиля — не имя сети: профиль можно
+    # переименовать, и тогда «сохранена» стояло бы не у той строки.
+    nm_known() {
+        local u
+        nm_saved | while IFS= read -r u; do
+            nmcli -g 802-11-wireless.ssid connection show uuid "$u" 2>/dev/null | nm_unesc
+        done
+    }
+
+    case "$1" in
+    scan)
+        # Скан сразу после предыдущего NetworkManager запрещает. Это не
+        # ошибка: у вида просто останется список с прошлого раза.
+        nmcli device wifi rescan ${NMIF:+ifname "$NMIF"} >/dev/null 2>&1
+        exit 0
+        ;;
+
+    list)
+        # --rescan no: отдаём то, что уже в кэше. Сканирование — отдельная
+        # команда, и ждать его здесь значило бы держать меню пустым лишние
+        # секунды на каждом открытии.
+        nmcli -t -f IN-USE,SIGNAL,SECURITY,SSID device wifi list --rescan no 2>/dev/null \
+        | awk -v known="$(nm_known)" '
+        # Поля режем вручную: SSID может содержать двоеточие, приезжает оно
+        # экранированным, и обычный split по ":" разорвал бы имя пополам.
+        function cut(line, out,   i, c, n, fld) {
+            n = 1; fld = ""
+            for (i = 1; i <= length(line); i++) {
+                c = substr(line, i, 1)
+                if (c == "\\") { i++; fld = fld substr(line, i, 1); continue }
+                if (c == ":" && n < 4) { out[n++] = fld; fld = ""; continue }
+                fld = fld c
+            }
+            out[n] = fld
+        }
+        BEGIN {
+            n = split(known, arr, "\n")
+            for (i = 1; i <= n; i++) if (arr[i] != "") isKnown[arr[i]] = 1
+        }
+        {
+            delete f
+            cut($0, f)
+            name = f[4]
+            if (name == "") next          # скрытая сеть: в меню жать не на что
+
+            sec = f[3]
+            if (sec == "") s = "open"
+            else if (index(sec, "802.1X")) s = "8021x"
+            else if (tolower(sec) ~ /wep/) s = "wep"
+            else s = "psk"
+
+            q = f[2] + 0
+            # Одна сеть — несколько точек: в меню нужна одна строка, и
+            # сигнал у неё лучший из всех.
+            if (!(name in best)) { order[++m] = name; best[name] = q; sech[name] = s }
+            else if (q > best[name]) best[name] = q
+            if (f[1] ~ /\*/) conn[name] = 1
+        }
+        END {
+            for (i = 1; i <= m; i++) {
+                name = order[i]
+                print (conn[name] ? "yes" : "no") "|" name "|" sech[name] "|" \
+                      best[name] "|" (isKnown[name] ? "yes" : "no")
+            }
+        }'
+        exit 0
+        ;;
+
+    toggle)
+        # Через nmcli, а не rfkill: NetworkManager держит свой флаг радио
+        # отдельно, и погашенный только по rfkill он потом сам не поднимет.
+        # Мягкую блокировку `radio wifi off` ставит тоже, так что radio_state
+        # выше видит результат.
+        if [ "$(nmcli radio wifi 2>/dev/null)" = "enabled" ]; then
+            nmcli radio wifi off >/dev/null 2>&1
+        else
+            nmcli radio wifi on >/dev/null 2>&1
+        fi
+        exit 0
+        ;;
+
+    connect)
+        SSID="$2"; PW="$3"
+        [ -z "$SSID" ] && exit 1
+        # --wait: без него неудачная попытка висит полторы минуты, и всё это
+        # время меню стоит в «подключаюсь».
+        if [ -n "$PW" ]; then
+            nmcli --wait 25 device wifi connect "$SSID" password "$PW" \
+                  ${NMIF:+ifname "$NMIF"} >/dev/null 2>&1
+        else
+            nmcli --wait 25 device wifi connect "$SSID" \
+                  ${NMIF:+ifname "$NMIF"} >/dev/null 2>&1
+        fi
+        exit $?
+        ;;
+
+    disconnect)
+        [ -n "$NMIF" ] && nmcli device disconnect "$NMIF" >/dev/null 2>&1
+        exit 0
+        ;;
+
+    forget)
+        [ -z "$2" ] && exit 1
+        # Профилей с одним SSID может быть несколько — сносим все. Иначе
+        # «забытая» сеть вернётся из второго профиля при первом же случае.
+        nm_saved | while IFS= read -r u; do
+            s=$(nmcli -g 802-11-wireless.ssid connection show uuid "$u" 2>/dev/null | nm_unesc)
+            [ "$s" = "$2" ] && nmcli connection delete uuid "$u" >/dev/null 2>&1
+        done
+        exit 0
+        ;;
+    esac
+fi
+
 case "$1" in
 status)
     echo "$(radio_state)|$(current_ssid)|$(current_quality)"

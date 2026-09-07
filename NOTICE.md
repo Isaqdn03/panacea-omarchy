@@ -22,20 +22,21 @@ upstream project is not affiliated with this repository and does not support it.
 
 ## Files patched locally
 
-Eight upstream files carry local edits. Every edit is fenced with a
-`PANACEA-LOCAL` marker, and `apply-local-patches.sh --check` reports 8/8 when
+Nine upstream files carry local edits. Every edit is fenced with a
+`PANACEA-LOCAL` marker, and `apply-local-patches.sh --check` reports 9/9 when
 they are all present.
 
 | File | What changed |
 | --- | --- |
 | `panacea/shell.qml` | GitHub + agent-usage segments on the collapsed pill, hairline group rules, shoulder-balance fixes, weather retry-on-network-failure |
-| `panacea/ControlsView.qml` | Full-width GitHub row in the expanded control centre |
+| `panacea/ControlsView.qml` | Full-width GitHub row in the expanded control centre; Flickable around the Wi-Fi list so it can scroll |
 | `panacea/LauncherView.qml` | "github" / "pr" / "ci" launcher keywords |
 | `panacea/WidgetsView.qml` | Clickable desktop widget cards |
 | `panacea/AgentsView.qml` | Page-level Flickable so the agent list can scroll |
 | `panacea/Translations.qml` | English strings for everything added above |
 | `panacea/scripts/agents.sh` | 6 h cache for static agent probes (3.2 s → 0.07 s per open) |
 | `panacea/scripts/weather.sh` | Distinguish "no network" from "no such city" |
+| `panacea/scripts/wifi.sh` | nmcli backend — this machine runs NetworkManager, not iwd |
 
 ## Updating from upstream
 
@@ -45,6 +46,6 @@ they are all present.
 ```
 
 `update.sh` carries everything from the upstream repo except `settings.json`, so
-the eight patched files above are overwritten and must be re-patched. If an
+the nine patched files above are overwritten and must be re-patched. If an
 anchor no longer matches, `apply-local-patches.sh` aborts and names the file
 rather than half-applying.

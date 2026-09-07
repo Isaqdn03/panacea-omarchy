@@ -2445,6 +2445,14 @@ Item {
             // ввод пароля для выбранной сети
             property string passwordFor: ""
 
+            // PANACEA-LOCAL: Потолок высоты списка. Капсула просит у содержимого
+            // implicitHeight + 30 и выше cfg.expandedH не растёт — значит виду
+            // достаётся expandedH - 30. Из них вычитаем заголовок со строкой
+            // отступа и, когда он открыт, поле пароля.
+            readonly property int listCap: Math.max(140,
+                (view.sys.cfg.expandedH || 620) - 30 - 35
+                - (wifiPage.passwordFor.length > 0 ? 53 : 0))
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 46
@@ -2512,8 +2520,29 @@ Item {
             }
 
             // список сетей
-            ColumnLayout {
+            // PANACEA-LOCAL: Прокрутка. В эфире тут три десятка точек, а панель не выше
+            // cfg.expandedH — без Flickable список обрезало по нижней кромке, и
+            // до половины сетей нельзя было добраться ничем: ни колесом, ни
+            // клавишами. Ровно та же беда, что была у страницы агентов.
+            //
+            // Прокручивается только список: заголовок с кнопкой обновления и
+            // поле ввода пароля должны оставаться на месте.
+            Flickable {
                 Layout.fillWidth: true
+                Layout.preferredHeight: Math.min(netList.implicitHeight, wifiPage.listCap)
+                contentHeight: netList.implicitHeight
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                flickDeceleration: 3000
+
+                ScrollBar.vertical: ScrollBar {
+                    policy: ScrollBar.AsNeeded
+                    contentItem: Rectangle { radius: 2; color: Qt.rgba(1, 1, 1, 0.22) }
+                }
+
+            ColumnLayout {
+                id: netList
+                width: wifiPage.width
                 spacing: 2
                 Repeater {
                     model: view.sys.wifiNetworks
@@ -2546,6 +2575,7 @@ Item {
                         }
                     }
                 }
+            }
             }
 
             Text {

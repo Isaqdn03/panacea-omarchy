@@ -179,10 +179,10 @@ git diff && git commit -am "..."
 ```sh
 ~/.config/panacea/scripts/update.sh        # upstream, over the top
 ~/.config/panacea/apply-local-patches.sh   # put the local edits back
-~/.config/panacea/apply-local-patches.sh --check   # expect 8/8
+~/.config/panacea/apply-local-patches.sh --check   # expect 9/9
 ```
 
-`update.sh` carries everything from upstream except `settings.json`, so the eight
+`update.sh` carries everything from upstream except `settings.json`, so the nine
 patched files lose their edits and must be re-patched. Every edit is fenced with a
 `PANACEA-LOCAL` marker and is idempotent; if an anchor no longer matches, the
 script aborts and names the file rather than half-applying. Then `./sync.sh` and
