@@ -4057,9 +4057,24 @@ PanelWindow {
         id: pillScreenPin
         interval: 400
         running: true
-        onTriggered: if (root.wantScreen && root.pickScreen !== root.wantScreen)
-                         root.pickScreen = root.wantScreen;
+        onTriggered: {
+            if (!root.wantScreen) return;
+            if (root.pickScreen !== root.wantScreen)
+                root.pickScreen = root.wantScreen;
+            root.surfaceEpoch++;
+        }
     }
+
+    // Monitor hotplug. When an output goes away (monitor switched off),
+    // Hyprland sends `closed` to every layer surface on it and Quickshell
+    // hides the window: `visible` drops to false from C++, which leaves the
+    // QML binding in place but stale. Moving the window to a screen later
+    // does not show it again (ProxyWindowBase::setScreen only re-shows a
+    // window that was visible), so the pill stayed gone after the monitor
+    // came back. Every `visible:` of a layer on root.screen therefore reads
+    // surfaceEpoch; bumping it after each screen pick re-evaluates those
+    // bindings and re-shows whatever was closed. Otherwise it is a no-op.
+    property int surfaceEpoch: 0
 
     // Прижимаемся тремя кромками: свободной остаётся та, в сторону которой
     // раскрывается панель. Иначе слой занял бы весь экран и exclusiveZone
@@ -4093,7 +4108,9 @@ PanelWindow {
     // Пока поверх экрана развёрнутое окно, пилюли не видно совсем.
     // Показываем её обратно, если панель раскрыли клавишами или если
     // нужно показать уровень громкости/яркости.
-    visible: !root.fullscreenActive || root.expanded || root.osdActive
+    // PANACEA-LOCAL: surfaceEpoch is always >= 0; reading it lets a monitor
+    // hotplug re-show the pill (see root.surfaceEpoch).
+    visible: (!root.fullscreenActive || root.expanded || root.osdActive) && root.surfaceEpoch >= 0
 
     Process {
         id: pCloseWin
@@ -6923,7 +6940,7 @@ PanelWindow {
     // правка пережила смену pillH и перенос пилюли на другую кромку.
     readonly property real topPad: (root.pillAtTop ? root.pillH : 0) + 8
 
-    visible: root.cfg.featWidgets
+    visible: root.cfg.featWidgets && root.surfaceEpoch >= 0   // PANACEA-LOCAL, see root.surfaceEpoch
     screen: root.screen
     anchors { top: true; left: true }
     implicitWidth:  widgets.implicitWidth + 56

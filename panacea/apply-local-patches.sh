@@ -896,9 +896,24 @@ SHELL_EDITS = [
         id: pillScreenPin
         interval: 400
         running: true
-        onTriggered: if (root.wantScreen && root.pickScreen !== root.wantScreen)
-                         root.pickScreen = root.wantScreen;
-    }""", "replace"),
+        onTriggered: {
+            if (!root.wantScreen) return;
+            if (root.pickScreen !== root.wantScreen)
+                root.pickScreen = root.wantScreen;
+            root.surfaceEpoch++;
+        }
+    }
+
+    // Monitor hotplug. When an output goes away (monitor switched off),
+    // Hyprland sends `closed` to every layer surface on it and Quickshell
+    // hides the window: `visible` drops to false from C++, which leaves the
+    // QML binding in place but stale. Moving the window to a screen later
+    // does not show it again (ProxyWindowBase::setScreen only re-shows a
+    // window that was visible), so the pill stayed gone after the monitor
+    // came back. Every `visible:` of a layer on root.screen therefore reads
+    // surfaceEpoch; bumping it after each screen pick re-evaluates those
+    // bindings and re-shows whatever was closed. Otherwise it is a no-op.
+    property int surfaceEpoch: 0""", "replace"),
 
     # 26. Значки на свёрнутом острове нажимаются мышью: наведение не
     #     раскрывает остров, пока курсор в столбце нажимаемого значка,
@@ -990,6 +1005,21 @@ SHELL_EDITS = [
             id: expandTimer; interval: 120
 ''', "replace"),
 
+    # 27. Пилюля не возвращалась после выключения монитора: Hyprland
+    #     закрывает слои на пропавшем выходе, Quickshell прячет окно, и
+    #     ничто не показывало его снова. Привязки visible читают
+    #     root.surfaceEpoch (заведён в правке 25), таймер выбора экрана его
+    #     увеличивает — привязки пересчитываются и показывают закрытое.
+    ('''    visible: !root.fullscreenActive || root.expanded || root.osdActive
+''',
+     '''    // PANACEA-LOCAL: surfaceEpoch is always >= 0; reading it lets a monitor
+    // hotplug re-show the pill (see root.surfaceEpoch).
+    visible: (!root.fullscreenActive || root.expanded || root.osdActive) && root.surfaceEpoch >= 0
+''', "replace"),
+    ('''    visible: root.cfg.featWidgets
+''',
+     '''    visible: root.cfg.featWidgets && root.surfaceEpoch >= 0   // PANACEA-LOCAL, see root.surfaceEpoch
+''', "replace"),
 ]
 
 # ------------------------------------------------------------ LauncherView.qml
