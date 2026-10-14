@@ -767,6 +767,65 @@ SHELL_EDITS = [
                 // Обёртка Item, а не голый RowLayout: клик должен ловиться на
 """, "replace"),
 
+    # 23. Стеклянный режим: состояние для тумблера в панели. Само переключение
+    # живёт в scripts/glass.sh — файл наш, обновлением не затирается.
+    (r"""    Process {
+        running: root.keepAwake
+        command: ["systemd-inhibit", "--what=idle:sleep:handle-lid-switch",
+                  "--who=Panacea", "--why=Keep awake", "sleep", "infinity"]
+    }
+""",
+     r"""
+    // ---------------------------------------------------------- PANACEA-LOCAL
+    // ------------------------------------------------------------ стекло
+    // Размытие Hyprland и прозрачный фон терминала одним тумблером. Всё делает
+    // scripts/glass.sh — он же знает, где лежит состояние, и он же перечитывает
+    // оба конфига. Здесь только то, что показать в панели.
+    //
+    // true как стартовое значение — не догадка: отсутствие файла-флага и
+    // означает включённое стекло, а на машине, где тумблером не пользовались,
+    // файла нет. Ошибиться можно ровно на те миллисекунды, пока не ответил
+    // pGlassRead ниже.
+    property bool glassOn: true
+    Process {
+        id: pGlassRead
+        command: ["sh", root.scriptDir + "/glass.sh", "status"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.glassOn = (text.trim() !== "off")
+        }
+    }
+    function refreshGlass() {
+        pGlassRead.running = false;
+        pGlassRead.running = true;
+    }
+    Process {
+        id: pGlassSet
+        command: ["sh", root.scriptDir + "/glass.sh", "toggle"]
+        onExited: root.refreshGlass()
+    }
+    function toggleGlass() {
+        // Тумблер переставляем сразу, не дожидаясь скрипта: тот перезагружает
+        // конфиг Hyprland и рассылает сигнал терминалам — это доли секунды, но
+        // всё это время кнопка выглядела бы ненажатой. Что вышло на самом деле,
+        // придёт следом из refreshGlass и поправит, если не вышло ничего.
+        root.glassOn = !root.glassOn;
+        pGlassSet.running = false;
+        pGlassSet.running = true;
+    }
+    // -------------------------------------------------------- /PANACEA-LOCAL
+""", "after"),
+
+    # 24. Стекло переключают и клавишами — панель должна это заметить.
+    (r"""            if (n === "configreloaded") monReplayTimer.restart();""",
+     r"""            if (n === "configreloaded") {
+                monReplayTimer.restart();
+                // PANACEA-LOCAL: стекло переключают и клавишами, мимо панели.
+                // Свой тумблер тоже перезагружает конфиг, так что сюда мы
+                // попадаем в любом случае — перечитать состояние здесь дешевле,
+                // чем опрашивать скрипт по таймеру круглые сутки.
+                root.refreshGlass();
+            }""", "replace"),
 ]
 
 # ------------------------------------------------------------ LauncherView.qml
@@ -935,8 +994,9 @@ TRANS_EDITS = [
 CONTROLS_EDITS = [
     ('''    readonly property var ccDefault: ["clock", "toggles", "sliders", "media", "power", "quick", "tray"]''',
      '''    // PANACEA-LOCAL: "github" добавлен между power и quick — это содержимое,
-    // а не действие, и над строкой с кофе и шестернёй ему место.
-    readonly property var ccDefault: ["clock", "toggles", "sliders", "media", "power", "github", "agents", "quick", "tray"]''', "replace"),
+    // а не действие, и над строкой с кофе и шестернёй ему место. "glass" —
+    // следом за ними, вплотную к строке с кофе: два режима подряд.
+    readonly property var ccDefault: ["clock", "toggles", "sliders", "media", "power", "github", "agents", "glass", "quick", "tray"]''', "replace"),
 
     ('''            // -------------------------------- не спать + кнопки-иконки''',
      '''            // ------------------------------------------ PANACEA-LOCAL
@@ -1051,6 +1111,96 @@ CONTROLS_EDITS = [
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: view.sys.openAgents()
+                }
+            }
+            // ----------------------------------------- /PANACEA-LOCAL
+
+            // ------------------------------------------ PANACEA-LOCAL
+            // Стеклянный режим: размытие Hyprland плюс прозрачный фон
+            // терминала. Своей строкой, а не значком в нижнем ряду: у режима
+            // два состояния, и тумблер их показывает, а значок — нет.
+            //
+            // Форма ровно как у «Coffee mode» ниже, вплоть до тумблера
+            // справа: обе строки переключают режим, который держится, пока
+            // его не выключат, и разной формой мы делали бы вид, что это
+            // разные вещи. Стоит выше — у стекла состояние видно на всём
+            // экране сразу, у кофе не видно нигде.
+            Rectangle {
+                id: glassRow
+                objectName: "cc-glass"
+                Layout.row: view.ccRow("glass")
+                Layout.column: 0
+
+                // Голубой — цвет стекла на прочих темах. На Nothing цветного
+                // акцента нет вовсе (см. кофе ниже, там ровно та же оговорка).
+                readonly property color tint: view.sys.themeNothing
+                                              ? view.sys.colOn : "#38bdf8"
+
+                Layout.fillWidth: true
+                Layout.preferredHeight: 44
+                radius: 12
+                color: view.sys.glassOn
+                       ? Qt.rgba(glassRow.tint.r, glassRow.tint.g, glassRow.tint.b, 0.16)
+                       : (glassMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05))
+                border.color: view.sys.glassOn
+                              ? Qt.rgba(glassRow.tint.r, glassRow.tint.g, glassRow.tint.b, 0.40)
+                              : view.sys.colLine
+                border.width: 1
+                Behavior on color { ColorAnimation { duration: 160 } }
+                Behavior on border.color { ColorAnimation { duration: 160 } }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 13
+                    anchors.rightMargin: 13
+                    spacing: 11
+
+                    Glyph {
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
+                        // md-blur / md-blur_off — та же точечная россыпь,
+                        // перечёркнутая в выключенном виде
+                        glyph: String.fromCodePoint(view.sys.glassOn ? 0xF00B5 : 0xF00B7)
+                        color: view.sys.glassOn ? glassRow.tint : view.sys.colMuted
+                        fontFam: view.sys.fontFam
+                        size: view.sys.iconSize + 2
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Glass mode"
+                        color: view.sys.glassOn ? view.sys.colFg : view.sys.colMuted
+                        font {
+                            family: view.sys.fontFam; pixelSize: view.sys.fontSize - 2
+                            bold: view.sys.glassOn
+                        }
+                    }
+                    // переключатель
+                    Rectangle {
+                        Layout.preferredWidth: 38
+                        Layout.preferredHeight: 21
+                        radius: 11
+                        color: view.sys.glassOn ? glassRow.tint : Qt.rgba(1, 1, 1, 0.14)
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        Rectangle {
+                            width: 17; height: 17; radius: 9
+                            y: 2
+                            x: view.sys.glassOn ? parent.width - width - 2 : 2
+                            // на белой дорожке белый кружок пропадает
+                            color: view.sys.glassOn
+                                   ? view.sys.fgOn(glassRow.tint) : "#ffffff"
+                            Behavior on x {
+                                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                            }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: glassMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: view.sys.toggleGlass()
                 }
             }
             // ----------------------------------------- /PANACEA-LOCAL

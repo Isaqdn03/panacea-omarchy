@@ -18,6 +18,7 @@ upstream project is not affiliated with this repository and does not support it.
 | `panacea/GithubView.qml` | GitHub inbox / CI page for the pill |
 | `panacea/scripts/github.sh` | Its data source: notifications, review requests, focused-repo CI |
 | `panacea/scripts/usage_brief.sh` | Highest Claude rate-limit percentage, for the pill segment |
+| `panacea/scripts/glass.sh` | Glass mode: Hyprland blur and the terminal's transparent background, flipped together |
 | `panacea/apply-local-patches.sh` | Re-applies every patch below after an upstream update |
 
 ## Files patched locally
@@ -28,8 +29,8 @@ they are all present.
 
 | File | What changed |
 | --- | --- |
-| `panacea/shell.qml` | GitHub + agent-usage segments on the collapsed pill, hairline group rules, shoulder-balance fixes, weather retry-on-network-failure |
-| `panacea/ControlsView.qml` | Full-width GitHub row in the expanded control centre; Flickable around the Wi-Fi list so it can scroll |
+| `panacea/shell.qml` | GitHub + agent-usage segments on the collapsed pill, hairline group rules, shoulder-balance fixes, weather retry-on-network-failure, glass-mode state |
+| `panacea/ControlsView.qml` | Full-width GitHub and glass-mode rows in the expanded control centre; Flickable around the Wi-Fi list so it can scroll |
 | `panacea/LauncherView.qml` | "github" / "pr" / "ci" launcher keywords |
 | `panacea/WidgetsView.qml` | Clickable desktop widget cards |
 | `panacea/AgentsView.qml` | Page-level Flickable so the agent list can scroll |

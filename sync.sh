@@ -14,6 +14,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/panacea"
 HYPR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
 OMA="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
+GHOSTTY="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty"
 STATUSLINE="$HOME/.claude/statusline-command.sh"
 
 DRY=0
@@ -67,7 +68,7 @@ copy "$STATUSLINE" "$REPO/integration/claude/statusline-command.sh" "Claude stat
 # The two Lua snippets are canonical in the repo, not on disk: the live files
 # hold them inline among unrelated Omarchy config, and on a hand-wired machine
 # they are not even marker-fenced. Report drift rather than guess at extents.
-step "Checking the Hyprland snippets"
+step "Checking the wiring snippets"
 for pair in "autostart.lua:launch_on_start(\"qs -c panacea\")" "bindings.lua:ipc call pill github"; do
     f="${pair%%:*}"; needle="${pair#*:}"
     if [ -f "$HYPR/$f" ] && grep -qF "$needle" "$HYPR/$f"; then
@@ -76,6 +77,14 @@ for pair in "autostart.lua:launch_on_start(\"qs -c panacea\")" "bindings.lua:ipc
         warn "$f no longer contains: $needle"
     fi
 done
+# Same idea for the terminal. Lose this line and glass mode still flips the
+# blur, but the terminal stops following it — half a toggle, and the half that
+# is hardest to spot from the pill.
+if [ -f "$GHOSTTY/config" ] && grep -qF 'panacea-glass.conf' "$GHOSTTY/config"; then
+    skip "ghostty/config still carries the glass-mode include"
+else
+    warn "ghostty/config no longer contains: panacea-glass.conf"
+fi
 
 step "Final secret scan"
 if grep -rIn --exclude-dir=.git -E '"weatherKey"[[:space:]]*:[[:space:]]*"[0-9a-f]{16,}"' "$REPO" ; then

@@ -26,8 +26,9 @@ Item {
     // прежней версии) отбрасываются, забытые дописываются в конец: раскладка
     // переживает и обновление оболочки, и правку файла руками.
     // PANACEA-LOCAL: "github" добавлен между power и quick — это содержимое,
-    // а не действие, и над строкой с кофе и шестернёй ему место.
-    readonly property var ccDefault: ["clock", "toggles", "sliders", "media", "power", "github", "agents", "quick", "tray"]
+    // а не действие, и над строкой с кофе и шестернёй ему место. "glass" —
+    // следом за ними, вплотную к строке с кофе: два режима подряд.
+    readonly property var ccDefault: ["clock", "toggles", "sliders", "media", "power", "github", "agents", "glass", "quick", "tray"]
     readonly property var ccOrder: {
         if (view.ccOrderOverride) return view.ccOrderOverride;
         var saved = String(view.sys.cfg.ccLayout || "").split(",").filter(x => x.length);
@@ -2043,6 +2044,96 @@ Item {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: view.sys.openAgents()
+                }
+            }
+            // ----------------------------------------- /PANACEA-LOCAL
+
+            // ------------------------------------------ PANACEA-LOCAL
+            // Стеклянный режим: размытие Hyprland плюс прозрачный фон
+            // терминала. Своей строкой, а не значком в нижнем ряду: у режима
+            // два состояния, и тумблер их показывает, а значок — нет.
+            //
+            // Форма ровно как у «Coffee mode» ниже, вплоть до тумблера
+            // справа: обе строки переключают режим, который держится, пока
+            // его не выключат, и разной формой мы делали бы вид, что это
+            // разные вещи. Стоит выше — у стекла состояние видно на всём
+            // экране сразу, у кофе не видно нигде.
+            Rectangle {
+                id: glassRow
+                objectName: "cc-glass"
+                Layout.row: view.ccRow("glass")
+                Layout.column: 0
+
+                // Голубой — цвет стекла на прочих темах. На Nothing цветного
+                // акцента нет вовсе (см. кофе ниже, там ровно та же оговорка).
+                readonly property color tint: view.sys.themeNothing
+                                              ? view.sys.colOn : "#38bdf8"
+
+                Layout.fillWidth: true
+                Layout.preferredHeight: 44
+                radius: 12
+                color: view.sys.glassOn
+                       ? Qt.rgba(glassRow.tint.r, glassRow.tint.g, glassRow.tint.b, 0.16)
+                       : (glassMa.containsMouse ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(1, 1, 1, 0.05))
+                border.color: view.sys.glassOn
+                              ? Qt.rgba(glassRow.tint.r, glassRow.tint.g, glassRow.tint.b, 0.40)
+                              : view.sys.colLine
+                border.width: 1
+                Behavior on color { ColorAnimation { duration: 160 } }
+                Behavior on border.color { ColorAnimation { duration: 160 } }
+
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 13
+                    anchors.rightMargin: 13
+                    spacing: 11
+
+                    Glyph {
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
+                        // md-blur / md-blur_off — та же точечная россыпь,
+                        // перечёркнутая в выключенном виде
+                        glyph: String.fromCodePoint(view.sys.glassOn ? 0xF00B5 : 0xF00B7)
+                        color: view.sys.glassOn ? glassRow.tint : view.sys.colMuted
+                        fontFam: view.sys.fontFam
+                        size: view.sys.iconSize + 2
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Glass mode"
+                        color: view.sys.glassOn ? view.sys.colFg : view.sys.colMuted
+                        font {
+                            family: view.sys.fontFam; pixelSize: view.sys.fontSize - 2
+                            bold: view.sys.glassOn
+                        }
+                    }
+                    // переключатель
+                    Rectangle {
+                        Layout.preferredWidth: 38
+                        Layout.preferredHeight: 21
+                        radius: 11
+                        color: view.sys.glassOn ? glassRow.tint : Qt.rgba(1, 1, 1, 0.14)
+                        Behavior on color { ColorAnimation { duration: 180 } }
+                        Rectangle {
+                            width: 17; height: 17; radius: 9
+                            y: 2
+                            x: view.sys.glassOn ? parent.width - width - 2 : 2
+                            // на белой дорожке белый кружок пропадает
+                            color: view.sys.glassOn
+                                   ? view.sys.fgOn(glassRow.tint) : "#ffffff"
+                            Behavior on x {
+                                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                            }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    id: glassMa
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: view.sys.toggleGlass()
                 }
             }
             // ----------------------------------------- /PANACEA-LOCAL

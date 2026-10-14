@@ -1427,7 +1427,14 @@ PanelWindow {
                 || n === "focusedmon")
                 fsProbe.restart();
             // перезагрузка конфига Hyprland стирает всё, что мы наприменяли
-            if (n === "configreloaded") monReplayTimer.restart();
+            if (n === "configreloaded") {
+                monReplayTimer.restart();
+                // PANACEA-LOCAL: стекло переключают и клавишами, мимо панели.
+                // Свой тумблер тоже перезагружает конфиг, так что сюда мы
+                // попадаем в любом случае — перечитать состояние здесь дешевле,
+                // чем опрашивать скрипт по таймеру круглые сутки.
+                root.refreshGlass();
+            }
         }
     }
     // Перезагрузка конфига стирает не только настройки мониторов: скорость
@@ -2458,6 +2465,45 @@ PanelWindow {
         command: ["systemd-inhibit", "--what=idle:sleep:handle-lid-switch",
                   "--who=Panacea", "--why=Keep awake", "sleep", "infinity"]
     }
+
+    // ---------------------------------------------------------- PANACEA-LOCAL
+    // ------------------------------------------------------------ стекло
+    // Размытие Hyprland и прозрачный фон терминала одним тумблером. Всё делает
+    // scripts/glass.sh — он же знает, где лежит состояние, и он же перечитывает
+    // оба конфига. Здесь только то, что показать в панели.
+    //
+    // true как стартовое значение — не догадка: отсутствие файла-флага и
+    // означает включённое стекло, а на машине, где тумблером не пользовались,
+    // файла нет. Ошибиться можно ровно на те миллисекунды, пока не ответил
+    // pGlassRead ниже.
+    property bool glassOn: true
+    Process {
+        id: pGlassRead
+        command: ["sh", root.scriptDir + "/glass.sh", "status"]
+        running: true
+        stdout: StdioCollector {
+            onStreamFinished: root.glassOn = (text.trim() !== "off")
+        }
+    }
+    function refreshGlass() {
+        pGlassRead.running = false;
+        pGlassRead.running = true;
+    }
+    Process {
+        id: pGlassSet
+        command: ["sh", root.scriptDir + "/glass.sh", "toggle"]
+        onExited: root.refreshGlass()
+    }
+    function toggleGlass() {
+        // Тумблер переставляем сразу, не дожидаясь скрипта: тот перезагружает
+        // конфиг Hyprland и рассылает сигнал терминалам — это доли секунды, но
+        // всё это время кнопка выглядела бы ненажатой. Что вышло на самом деле,
+        // придёт следом из refreshGlass и поправит, если не вышло ничего.
+        root.glassOn = !root.glassOn;
+        pGlassSet.running = false;
+        pGlassSet.running = true;
+    }
+    // -------------------------------------------------------- /PANACEA-LOCAL
 
     // ------------------------------------------------------- звук: устройства и приложения
     // Список выходов и переключение между ними.

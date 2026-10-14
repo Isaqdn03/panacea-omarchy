@@ -25,9 +25,60 @@ clone → ./install.sh → same pill
   plus live Claude Code rate-limit percentages.
 - Both surfaces also appear as segments on the collapsed pill and as a row in the
   expanded control centre.
+- **Glass mode** (`SUPER + SHIFT + T`, or the switch in the control centre) —
+  frosted desktop on, flat opaque desktop off. See below.
 - The Nothing-theme island, regrouped into five clusters — `nav │ ambient │ clock
   │ live │ status` — separated by hairline rules, with the shoulders balanced so
   the clock sits at true screen centre.
+
+## Glass mode
+
+One switch over two settings, because either one alone is useless:
+
+| | |
+| --- | --- |
+| Hyprland `decoration:blur` | Frosts whatever is visible **through** transparent pixels — the terminal's background, menu backdrops, the Quickshell layers. |
+| ghostty `background-opacity` | Gives blur something to frost. At `1` the terminal paints a solid colour and there is no glass to see. |
+
+Turn off only the blur and the terminal stays a hole punched through to the
+wallpaper, now unfrosted and unreadable. Turn off only the transparency and the
+blur keeps costing frames where nothing shows it. So they move together:
+
+```sh
+~/.config/panacea/scripts/glass.sh          # toggle
+~/.config/panacea/scripts/glass.sh on|off   # set explicitly
+~/.config/panacea/scripts/glass.sh status   # prints on or off, changes nothing
+```
+
+The pill's switch and `SUPER + SHIFT + T` both just run that script, and the pill
+picks up the change either way — it re-reads the state on Hyprland's
+`configreloaded`, which the script triggers itself.
+
+**Glass on is the absence of a file.** Off writes
+`~/.local/state/omarchy/toggles/hypr/panacea-glass-off.lua`, which Omarchy sources
+*after* your `~/.config/hypr/looknfeel.lua` — in `hyprland.lua`,
+`require("default.hypr.toggles")` comes after `require("hypr.looknfeel")` — so it
+overrides your config instead of arguing with it. A machine that has never touched the switch has no file and looks
+exactly like `looknfeel.lua` says it should. Delete the file by hand and glass
+comes back on the next `hyprctl reload`.
+
+The terminal's half lives in `~/.config/ghostty/panacea-glass.conf`, pulled in by
+a marker-fenced `config-file` line appended to `~/.config/ghostty/config`. Last
+line wins in ghostty, so the include beats any `background-opacity` above it.
+Want softer glass than "no background at all"? `GLASS_TERM_ALPHA` at the top of
+`glass.sh` is the one number to change — `0.85` gives the terminal a dark
+background of its own with the blur behind it.
+
+Only ghostty is wired up, because it is the only terminal here with a
+transparent background; alacritty and foot are opaque in both modes and need
+nothing.
+
+> **Upgrading an install made before this existed:** re-running `./install.sh`
+> adds the ghostty include, but not the keybind — the binds block is skipped
+> whole once it is present, so the new line has to be pasted into
+> `~/.config/hypr/bindings.lua` by hand (it is in
+> `integration/hypr/bindings.snippet.lua`). The control-centre switch works
+> without it.
 
 ## Requirements
 
@@ -82,7 +133,9 @@ own files are never rewritten wholesale.
 | `~/.config/panacea/` | The pill itself. An existing one is backed up to `panacea.bak.<epoch>` first. |
 | `~/.config/quickshell/panacea` | Symlink to the above, so `qs -c panacea` resolves. |
 | `~/.config/hypr/autostart.lua` | One appended, marker-fenced `launch_on_start` line. |
-| `~/.config/hypr/bindings.lua` | Appended, marker-fenced `SUPER + I` / `SUPER + U` binds. |
+| `~/.config/hypr/bindings.lua` | Appended, marker-fenced `SUPER + I` / `SUPER + U` / `SUPER + SHIFT + T` binds. |
+| `~/.config/ghostty/config` | One appended, marker-fenced `config-file` line — the glass-mode include. |
+| `~/.config/ghostty/panacea-glass.conf` | New file, written by `glass.sh`. Holds one line: the terminal's background opacity. |
 | `~/.config/omarchy/hooks/theme-set.d/20-panacea-wallpaper.hook` | New file. Mirrors Omarchy's current background into `~/.config/hypr/wallpaper.conf`, which Panacea reads as its wallpaper state. |
 | `~/.config/hypr/wallpaper.conf` | Seeded once by running that hook. |
 | `~/.claude/statusline-command.sh` | Installed **only if absent**. See below. |
@@ -198,6 +251,10 @@ commit.
 Strips the marker-fenced blocks, removes the symlink and the hook, runs
 `omarchy toggle bar off` to bring the Omarchy bar back, and stops the pill. It
 never deletes your `statusline-command.sh` — only the block inside it.
+
+Glass mode's two generated files go too. The Hyprland flag especially: left
+behind, it would keep blur off for good on a machine with nothing left on it to
+explain why.
 
 A block you added by hand, before the markers existed, is reported with line
 numbers rather than removed, because guessing its extent from content risks

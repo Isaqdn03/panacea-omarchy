@@ -20,6 +20,7 @@ CONF="${XDG_CONFIG_HOME:-$HOME/.config}/panacea"
 HYPR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr"
 OMA="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy"
 QSDIR="${XDG_CONFIG_HOME:-$HOME/.config}/quickshell"
+GHOSTTY="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty"
 STATUSLINE="$HOME/.claude/statusline-command.sh"
 MARK_OPEN='>>> panacea-omarchy >>>'
 
@@ -138,7 +139,22 @@ step "Wiring Hyprland"
 append_block "$HYPR/autostart.lua" "$REPO/integration/hypr/autostart.snippet.lua" \
     'launch_on_start\("qs -c panacea"\)' "the autostart line"
 append_block "$HYPR/bindings.lua" "$REPO/integration/hypr/bindings.snippet.lua" \
-    'ipc call pill github' "the SUPER+I / SUPER+U binds"
+    'ipc call pill github' "the SUPER+I / SUPER+U / SUPER+SHIFT+T binds"
+
+# ── Glass mode ───────────────────────────────────────────────────────────────
+# The toggle needs the terminal as much as it needs Hyprland: blur has nothing
+# to frost unless the terminal's background is transparent, so the two are
+# flipped together. This include is how glass.sh reaches ghostty.
+step "Wiring glass mode"
+append_block "$GHOSTTY/config" "$REPO/integration/ghostty/glass.snippet.conf" \
+    'panacea-glass\.conf' "the glass-mode include"
+# Seed the terminal's side now. Without it ghostty falls back to opaque while
+# the pill — which reads the Hyprland flag, and that flag is absent — reports
+# glass on: a fresh machine would boot into half a mode.
+if [ -f "$CONF/scripts/glass.sh" ]; then
+    run "'$CONF/scripts/glass.sh' on"
+    did "glass mode on (toggle it with SUPER + SHIFT + T or the pill's switch)"
+fi
 
 # ── 8-9. Wallpaper hook ──────────────────────────────────────────────────────
 step "Installing the wallpaper hook"
