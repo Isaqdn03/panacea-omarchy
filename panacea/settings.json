@@ -94,7 +94,7 @@
     "pillKeepVisible": false,
     "pillOverlay": false,
     "pillPos": "top",
-    "pillScreen": "auto",
+    "pillScreen": "DP-1",
     "recDir": "~/Videos",
     "recFps": 60,
     "recMic": false,

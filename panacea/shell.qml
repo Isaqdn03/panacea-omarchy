@@ -4018,15 +4018,47 @@ PanelWindow {
     // Hyprland ещё не ответил, отдаём null — Quickshell возьмёт экран сам.
     screen: root.pickScreen
 
-    readonly property var pickScreen: {
+    // ---------------------------------------------------------- PANACEA-LOCAL
+    // Startup pin. settings.json is read asynchronously, so the FIRST
+    // evaluation of this runs while pillScreen is still the "auto" default and
+    // the layer gets created on Quickshell's default output. The later change
+    // to the configured screen arrives while the layer is still being set up
+    // and is silently dropped, so the pill sat on the wrong monitor after
+    // every login. Changing it once more AFTER startup does take effect.
+    //
+    // Hence the timer: the value is computed as a pure binding, then applied
+    // one event-loop beat later. With a fixed pillScreen this fires once at
+    // startup and never again, so the exclusiveZone strip stays put and
+    // windows never resize.
+    //
+    // Deferring also avoids a crash: assigning `screen:` straight from the
+    // binding let Quickshell call QWindow::setScreen() inside the Hyprland
+    // socket-notifier callback, which segfaults
+    // (#1 QWindow::setScreen ... #16 QSocketNotifier::event).
+    readonly property var wantScreen: {
+        var all = Quickshell.screens;
         var want = root.cfg.pillScreen;
         if (want && want !== "auto") {
-            var all = Quickshell.screens;
             for (var i = 0; i < all.length; i++)
                 if (all[i].name === want) return all[i];
         }
         var fm = Hyprland.focusedMonitor;
-        return (fm && fm.screen) ? fm.screen : null;
+        if (fm && fm.screen) return fm.screen;
+        if (fm && fm.name) {
+            for (var j = 0; j < all.length; j++)
+                if (all[j].name === fm.name) return all[j];
+        }
+        return null;
+    }
+
+    property var pickScreen: null
+    onWantScreenChanged: pillScreenPin.restart()
+    Timer {
+        id: pillScreenPin
+        interval: 400
+        running: true
+        onTriggered: if (root.wantScreen && root.pickScreen !== root.wantScreen)
+                         root.pickScreen = root.wantScreen;
     }
 
     // Прижимаемся тремя кромками: свободной остаётся та, в сторону которой
@@ -4050,9 +4082,13 @@ PanelWindow {
     // окно тоже должно задать само
     implicitWidth: root.screen ? root.screen.width : 1920
     color: "transparent"
-    // зазор между пилюлей и окнами (0 в режиме оверлея или при скрытии)
+    // ---------------------------------------------------------- PANACEA-LOCAL
+    // Полоса под остров — ровно его высота. Своего зазора до окон здесь нет:
+    // его задаёт Hyprland (general:gaps_out). Пока мы прибавляли ещё и gap,
+    // они складывались, и сверху выходило 11 px против 6 по остальным
+    // кромкам. 0 — в режиме оверлея и когда остров скрыт.
     exclusiveZone: (root.cfg.pillOverlay || root.pillHidden || (root.fullscreenActive && !root.expanded))
-                   ? 0 : pillH + gap
+                   ? 0 : pillH
     WlrLayershell.layer: WlrLayer.Overlay
     // Пока поверх экрана развёрнутое окно, пилюли не видно совсем.
     // Показываем её обратно, если панель раскрыли клавишами или если
@@ -4464,6 +4500,16 @@ PanelWindow {
                         ? capsuleHover.point.scenePosition : Qt.point(-9999, -9999);
             }
             onPointChanged: {
+                // PANACEA-LOCAL: курсор сошёл с нажимаемого значка на пустое
+                // место острова — раскрытие, которое значок придержал (см.
+                // capsule.overSegment), догоняет сейчас. Только придержанное:
+                // свёрнутый Esc остров под курсором сам не раскрывается.
+                if (capsule.segBlocked && capsuleHover.hovered && !root.expanded
+                    && !capsule.overSegment()) {
+                    capsule.segBlocked = false;
+                    expandTimer.restart();
+                    return;
+                }
                 if (root.hoverExpandArmed || !capsuleHover.hovered) return;
                 var p = capsuleHover.point.scenePosition;
                 if (Math.abs(p.x - capsuleHover.armPos.x)
@@ -4483,6 +4529,7 @@ PanelWindow {
                 } else {
                     expandTimer.stop();
                     collapseTimer.restart();
+                    capsule.segBlocked = false;   // PANACEA-LOCAL, см. overSegment
                     // Курсор ушёл — разрешаем раскрытие снова, но не сразу.
                     // При переезде к другой кромке остров на кадр выскакивает
                     // из-под курсора, и мгновенное возвращение разрешения
@@ -4499,6 +4546,45 @@ PanelWindow {
         // страницы не подсовывают: трек живёт карточкой прямо здесь, а до
         // пульта записи один клик по плитке — зато не приходится гадать,
         // что откроется.
+        // PANACEA-LOCAL. Наведение раскрывает остров мгновенно, и всё, что
+        // на свёрнутом острове нажимается — точки столов, погода, нагрузка
+        // агента, GitHub, — мышью было не достать: пока курсор доезжал до
+        // значка, остров уже становился панелью, и значка под ним не было.
+        // Поэтому над нажимаемым значком наведение остров не раскрывает, а
+        // сошёл курсор со значка на пустое место — раскрывает, как раньше.
+        //
+        // Значок узнаём не по списку, а по признаку: видимая MouseArea с
+        // hoverEnabled. Так новые значки получают это сами. Сама капсула под
+        // признак не попадает: её MouseArea (клик разворачивает) наведение
+        // не слушает.
+        //
+        // Сверяем только X — весь столбец над значком и под ним. Значок ниже
+        // острова, и снизу курсор сперва пересекает голую полосу под ним:
+        // проверка «курсор на самой MouseArea» раскрывала остров ровно там,
+        // за пару пикселей до цели.
+        //
+        // Прозрачное пропускаем: столбик для боковых кромок (vertCapsule) у
+        // верхней кромки не скрыт, а лишь прозрачен, и его MouseArea плеера
+        // лежит поперёк часов — без этой проверки часы считались значком.
+        property bool segBlocked: false
+        function overSegment() {
+            var sp = capsuleHover.point.scenePosition;
+            function walk(it) {
+                var kids = it.children;
+                for (var i = 0; i < kids.length; i++) {
+                    var c = kids[i];
+                    if (!c.visible || c.opacity < 0.01) continue;
+                    if (c.hoverEnabled === true && c.enabled) {
+                        var q = c.mapFromItem(null, sp.x, sp.y);
+                        if (q.x >= 0 && q.x <= c.width) return true;
+                    }
+                    if (walk(c)) return true;
+                }
+                return false;
+            }
+            return walk(capsule);
+        }
+
         function openPanel() {
             if (!root.expanded) {
                 pageResetTimer.stop();
@@ -4508,7 +4594,11 @@ PanelWindow {
         }
 
         Timer {
-            id: expandTimer; interval: 0
+            // PANACEA-LOCAL: было 0. Между значками есть просветы, и курсор,
+            // идущий к значку наискосок, на миг задевает голую капсулу —
+            // мгновенное раскрытие убирало значок из-под мыши. 120 мс на
+            // глаз не заметны, а наискосок просвет проходят быстрее.
+            id: expandTimer; interval: 120
             onTriggered: {
                 if (!capsuleHover.hovered || root.launcherOpen) return;
                 if (!root.hoverExpandArmed) return;
@@ -4520,6 +4610,9 @@ PanelWindow {
                 // раскрытие следом означало бы: хотел посмотреть время —
                 // получи панель во весь экран. Разворачивает клик.
                 if (root.cfg.pillAutoHide) return;
+                // PANACEA-LOCAL: курсор на нажимаемом значке — не раскрываем,
+                // иначе значок исчезнет из-под мыши раньше клика.
+                if (capsule.overSegment()) { capsule.segBlocked = true; return; }
                 capsule.openPanel();
             }
         }
@@ -6825,10 +6918,10 @@ PanelWindow {
 
     // PANACEA-LOCAL: отступ сверху. Было 28 — запас под вогнутый уголок
     // острова. Но слой Bottom, а плиточное окно начинается ниже: под ним
-    // зона острова (pillH + gap) и зазор Hyprland. При 28 карточка вылезала
+    // зона острова (pillH) и зазор Hyprland. При 28 карточка вылезала
     // над верхней кромкой окна узкой полоской. Считаем от той же зоны, чтобы
     // правка пережила смену pillH и перенос пилюли на другую кромку.
-    readonly property real topPad: (root.pillAtTop ? root.pillH + root.gap : 0) + 8
+    readonly property real topPad: (root.pillAtTop ? root.pillH : 0) + 8
 
     visible: root.cfg.featWidgets
     screen: root.screen

@@ -421,6 +421,7 @@ SHELL_EDITS = [
             root.weatherRetries++;
             root.refreshWeather();
         }
+    }
 """, "replace"),
 
     # 8. Настольные карточки уезжают под верхнюю кромку окон.
@@ -437,10 +438,10 @@ SHELL_EDITS = [
 
     // PANACEA-LOCAL: отступ сверху. Было 28 — запас под вогнутый уголок
     // острова. Но слой Bottom, а плиточное окно начинается ниже: под ним
-    // зона острова (pillH + gap) и зазор Hyprland. При 28 карточка вылезала
+    // зона острова (pillH) и зазор Hyprland. При 28 карточка вылезала
     // над верхней кромкой окна узкой полоской. Считаем от той же зоны, чтобы
     // правка пережила смену pillH и перенос пилюли на другую кромку.
-    readonly property real topPad: (root.pillAtTop ? root.pillH + root.gap : 0) + 8
+    readonly property real topPad: (root.pillAtTop ? root.pillH : 0) + 8
 
     visible: root.cfg.featWidgets
     screen: root.screen
@@ -767,6 +768,18 @@ SHELL_EDITS = [
                 // Обёртка Item, а не голый RowLayout: клик должен ловиться на
 """, "replace"),
 
+    # 22. Полоса под остров равна его высоте — зазор до окон отдан Hyprland.
+    (r"""    // зазор между пилюлей и окнами (0 в режиме оверлея или при скрытии)
+    exclusiveZone: (root.cfg.pillOverlay || root.pillHidden || (root.fullscreenActive && !root.expanded))
+                   ? 0 : pillH + gap""",
+     r"""    // ---------------------------------------------------------- PANACEA-LOCAL
+    // Полоса под остров — ровно его высота. Своего зазора до окон здесь нет:
+    // его задаёт Hyprland (general:gaps_out). Пока мы прибавляли ещё и gap,
+    // они складывались, и сверху выходило 11 px против 6 по остальным
+    // кромкам. 0 — в режиме оверлея и когда остров скрыт.
+    exclusiveZone: (root.cfg.pillOverlay || root.pillHidden || (root.fullscreenActive && !root.expanded))
+                   ? 0 : pillH""", "replace"),
+
     # 23. Стеклянный режим: состояние для тумблера в панели. Само переключение
     # живёт в scripts/glass.sh — файл наш, обновлением не затирается.
     (r"""    Process {
@@ -826,6 +839,157 @@ SHELL_EDITS = [
                 // чем опрашивать скрипт по таймеру круглые сутки.
                 root.refreshGlass();
             }""", "replace"),
+
+    # 25. Пилюля должна вставать на заданный экран при старте. settings.json
+    #     читается асинхронно, поэтому первое вычисление pickScreen идёт со
+    #     значением "auto" по умолчанию, слой создаётся на экране Quickshell по
+    #     умолчанию, а последующая смена теряется — после каждого входа пилюля
+    #     оказывалась не на том мониторе. Повторное присвоение ПОСЛЕ старта
+    #     срабатывает, отсюда таймер. При фиксированном pillScreen он отработает
+    #     ровно один раз: полоса exclusiveZone не ездит, окна не прыгают.
+    (r"""    readonly property var pickScreen: {
+        var want = root.cfg.pillScreen;
+        if (want && want !== "auto") {
+            var all = Quickshell.screens;
+            for (var i = 0; i < all.length; i++)
+                if (all[i].name === want) return all[i];
+        }
+        var fm = Hyprland.focusedMonitor;
+        return (fm && fm.screen) ? fm.screen : null;
+    }""",
+     r"""    // ---------------------------------------------------------- PANACEA-LOCAL
+    // Startup pin. settings.json is read asynchronously, so the FIRST
+    // evaluation of this runs while pillScreen is still the "auto" default and
+    // the layer gets created on Quickshell's default output. The later change
+    // to the configured screen arrives while the layer is still being set up
+    // and is silently dropped, so the pill sat on the wrong monitor after
+    // every login. Changing it once more AFTER startup does take effect.
+    //
+    // Hence the timer: the value is computed as a pure binding, then applied
+    // one event-loop beat later. With a fixed pillScreen this fires once at
+    // startup and never again, so the exclusiveZone strip stays put and
+    // windows never resize.
+    //
+    // Deferring also avoids a crash: assigning `screen:` straight from the
+    // binding let Quickshell call QWindow::setScreen() inside the Hyprland
+    // socket-notifier callback, which segfaults
+    // (#1 QWindow::setScreen ... #16 QSocketNotifier::event).
+    readonly property var wantScreen: {
+        var all = Quickshell.screens;
+        var want = root.cfg.pillScreen;
+        if (want && want !== "auto") {
+            for (var i = 0; i < all.length; i++)
+                if (all[i].name === want) return all[i];
+        }
+        var fm = Hyprland.focusedMonitor;
+        if (fm && fm.screen) return fm.screen;
+        if (fm && fm.name) {
+            for (var j = 0; j < all.length; j++)
+                if (all[j].name === fm.name) return all[j];
+        }
+        return null;
+    }
+
+    property var pickScreen: null
+    onWantScreenChanged: pillScreenPin.restart()
+    Timer {
+        id: pillScreenPin
+        interval: 400
+        running: true
+        onTriggered: if (root.wantScreen && root.pickScreen !== root.wantScreen)
+                         root.pickScreen = root.wantScreen;
+    }""", "replace"),
+
+    # 26. Значки на свёрнутом острове нажимаются мышью: наведение не
+    #     раскрывает остров, пока курсор в столбце нажимаемого значка,
+    #     и раскрывает с задержкой 120 мс вместо мгновенной.
+    #     Подробно — в самой правке, над capsule.overSegment().
+    (r'''        function openPanel() {
+''',
+     r'''        // PANACEA-LOCAL. Наведение раскрывает остров мгновенно, и всё, что
+        // на свёрнутом острове нажимается — точки столов, погода, нагрузка
+        // агента, GitHub, — мышью было не достать: пока курсор доезжал до
+        // значка, остров уже становился панелью, и значка под ним не было.
+        // Поэтому над нажимаемым значком наведение остров не раскрывает, а
+        // сошёл курсор со значка на пустое место — раскрывает, как раньше.
+        //
+        // Значок узнаём не по списку, а по признаку: видимая MouseArea с
+        // hoverEnabled. Так новые значки получают это сами. Сама капсула под
+        // признак не попадает: её MouseArea (клик разворачивает) наведение
+        // не слушает.
+        //
+        // Сверяем только X — весь столбец над значком и под ним. Значок ниже
+        // острова, и снизу курсор сперва пересекает голую полосу под ним:
+        // проверка «курсор на самой MouseArea» раскрывала остров ровно там,
+        // за пару пикселей до цели.
+        //
+        // Прозрачное пропускаем: столбик для боковых кромок (vertCapsule) у
+        // верхней кромки не скрыт, а лишь прозрачен, и его MouseArea плеера
+        // лежит поперёк часов — без этой проверки часы считались значком.
+        property bool segBlocked: false
+        function overSegment() {
+            var sp = capsuleHover.point.scenePosition;
+            function walk(it) {
+                var kids = it.children;
+                for (var i = 0; i < kids.length; i++) {
+                    var c = kids[i];
+                    if (!c.visible || c.opacity < 0.01) continue;
+                    if (c.hoverEnabled === true && c.enabled) {
+                        var q = c.mapFromItem(null, sp.x, sp.y);
+                        if (q.x >= 0 && q.x <= c.width) return true;
+                    }
+                    if (walk(c)) return true;
+                }
+                return false;
+            }
+            return walk(capsule);
+        }
+
+        function openPanel() {
+''', "replace"),
+    (r'''            onPointChanged: {
+                if (root.hoverExpandArmed || !capsuleHover.hovered) return;
+''',
+     r'''            onPointChanged: {
+                // PANACEA-LOCAL: курсор сошёл с нажимаемого значка на пустое
+                // место острова — раскрытие, которое значок придержал (см.
+                // capsule.overSegment), догоняет сейчас. Только придержанное:
+                // свёрнутый Esc остров под курсором сам не раскрывается.
+                if (capsule.segBlocked && capsuleHover.hovered && !root.expanded
+                    && !capsule.overSegment()) {
+                    capsule.segBlocked = false;
+                    expandTimer.restart();
+                    return;
+                }
+                if (root.hoverExpandArmed || !capsuleHover.hovered) return;
+''', "replace"),
+    (r'''                } else {
+                    expandTimer.stop();
+                    collapseTimer.restart();
+''',
+     r'''                } else {
+                    expandTimer.stop();
+                    collapseTimer.restart();
+                    capsule.segBlocked = false;   // PANACEA-LOCAL, см. overSegment
+''', "replace"),
+    (r'''                if (root.cfg.pillAutoHide) return;
+                capsule.openPanel();
+''',
+     r'''                if (root.cfg.pillAutoHide) return;
+                // PANACEA-LOCAL: курсор на нажимаемом значке — не раскрываем,
+                // иначе значок исчезнет из-под мыши раньше клика.
+                if (capsule.overSegment()) { capsule.segBlocked = true; return; }
+                capsule.openPanel();
+''', "replace"),
+    (r'''            id: expandTimer; interval: 0
+''',
+     r'''            // PANACEA-LOCAL: было 0. Между значками есть просветы, и курсор,
+            // идущий к значку наискосок, на миг задевает голую капсулу —
+            // мгновенное раскрытие убирало значок из-под мыши. 120 мс на
+            // глаз не заметны, а наискосок просвет проходят быстрее.
+            id: expandTimer; interval: 120
+''', "replace"),
+
 ]
 
 # ------------------------------------------------------------ LauncherView.qml
@@ -1340,7 +1504,15 @@ add "$(other_agent qwen         "Qwen Code"     || true)"''',
 # раз в неделю, — поэтому держим их в кэше. Нагрузка Claude, единственное живое
 # число на этой странице, считается каждый раз заново. `--force` обходит кэш;
 # после обновления CLI версия догонит сама, но не позже, чем через TTL.
-OTHERS_CACHE="${TMPDIR:-/tmp}/panacea-agents-$(id -u).json"
+#
+# PANACEA-LOCAL: кэш лежал в /tmp, а /tmp чистится на каждой загрузке. Пустой
+# кэш — это опрос с нуля, ~8 с (crush, copilot и cursor-agent упираются в
+# timeout по 2 с каждый), и всё это время окно агентов стояло пустым. Хуже
+# того: закрытие окна убивает скрипт раньше, чем тот успевал записать кэш, и
+# следующее открытие начинало те же 8 с заново — окно не открывалось никогда.
+# Поэтому кэш теперь в ~/.cache, а устаревший отдаётся сразу и обновляется в
+# фоне (см. --probe ниже).
+OTHERS_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/panacea-agents.json"
 OTHERS_TTL=21600   # 6 ч
 
 others='[]'
@@ -1367,19 +1539,41 @@ probe_others() {
     oadd "$(other_agent qwen         "Qwen Code"     || true)"
 }
 
-cached=''
-if [ "${1:-}" != "--force" ] && [ -f "$OTHERS_CACHE" ]; then
-    age=$(( $(date +%s) - $(stat -c %Y "$OTHERS_CACHE" 2>/dev/null || echo 0) ))
-    if [ "$age" -lt "$OTHERS_TTL" ] && jq -e . "$OTHERS_CACHE" >/dev/null 2>&1; then
-        cached="$(cat "$OTHERS_CACHE")"
-    fi
+# Запись через временный файл: вид может прочитать кэш посреди записи.
+save_others() {
+    mkdir -p "${OTHERS_CACHE%/*}" 2>/dev/null
+    printf '%s' "$others" >"$OTHERS_CACHE.$$" 2>/dev/null \
+        && mv -f "$OTHERS_CACHE.$$" "$OTHERS_CACHE" 2>/dev/null \
+        || rm -f "$OTHERS_CACHE.$$"
+}
+
+# Фоновый опрос. Своя сессия (setsid) — чтобы закрытие окна не убило и его;
+# flock — чтобы таймер вида, дёргающий скрипт раз в 20 с, не наплодил
+# параллельных опросов, пока первый ещё идёт.
+if [ "${1:-}" = "--probe" ]; then
+    mkdir -p "${OTHERS_CACHE%/*}" 2>/dev/null
+    exec 9>"$OTHERS_CACHE.lock"
+    flock -n 9 || exit 0
+    probe_others
+    save_others
+    exit 0
 fi
 
-if [ -n "$cached" ]; then
-    others="$cached"
-else
+cached=''; stale=1
+if [ -f "$OTHERS_CACHE" ] && jq -e . "$OTHERS_CACHE" >/dev/null 2>&1; then
+    cached="$(cat "$OTHERS_CACHE")"
+    age=$(( $(date +%s) - $(stat -c %Y "$OTHERS_CACHE" 2>/dev/null || echo 0) ))
+    [ "$age" -lt "$OTHERS_TTL" ] && stale=0
+fi
+
+if [ "${1:-}" = "--force" ]; then
     probe_others
-    printf '%s' "$others" >"$OTHERS_CACHE" 2>/dev/null || true
+    save_others
+else
+    # Устаревшее лучше пустого: версии меняются раз в неделю, а пустое окно и
+    # было тем, из-за чего страница казалась сломанной.
+    [ -n "$cached" ] && others="$cached"
+    [ "$stale" = 1 ] && setsid -f bash "$0" --probe </dev/null >/dev/null 2>&1
 fi
 
 add "$(claude_json || true)"

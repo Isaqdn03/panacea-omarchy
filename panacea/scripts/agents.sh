@@ -211,7 +211,15 @@ add() {
 # раз в неделю, — поэтому держим их в кэше. Нагрузка Claude, единственное живое
 # число на этой странице, считается каждый раз заново. `--force` обходит кэш;
 # после обновления CLI версия догонит сама, но не позже, чем через TTL.
-OTHERS_CACHE="${TMPDIR:-/tmp}/panacea-agents-$(id -u).json"
+#
+# PANACEA-LOCAL: кэш лежал в /tmp, а /tmp чистится на каждой загрузке. Пустой
+# кэш — это опрос с нуля, ~8 с (crush, copilot и cursor-agent упираются в
+# timeout по 2 с каждый), и всё это время окно агентов стояло пустым. Хуже
+# того: закрытие окна убивает скрипт раньше, чем тот успевал записать кэш, и
+# следующее открытие начинало те же 8 с заново — окно не открывалось никогда.
+# Поэтому кэш теперь в ~/.cache, а устаревший отдаётся сразу и обновляется в
+# фоне (см. --probe ниже).
+OTHERS_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/panacea-agents.json"
 OTHERS_TTL=21600   # 6 ч
 
 others='[]'
@@ -238,19 +246,41 @@ probe_others() {
     oadd "$(other_agent qwen         "Qwen Code"     || true)"
 }
 
-cached=''
-if [ "${1:-}" != "--force" ] && [ -f "$OTHERS_CACHE" ]; then
-    age=$(( $(date +%s) - $(stat -c %Y "$OTHERS_CACHE" 2>/dev/null || echo 0) ))
-    if [ "$age" -lt "$OTHERS_TTL" ] && jq -e . "$OTHERS_CACHE" >/dev/null 2>&1; then
-        cached="$(cat "$OTHERS_CACHE")"
-    fi
+# Запись через временный файл: вид может прочитать кэш посреди записи.
+save_others() {
+    mkdir -p "${OTHERS_CACHE%/*}" 2>/dev/null
+    printf '%s' "$others" >"$OTHERS_CACHE.$$" 2>/dev/null \
+        && mv -f "$OTHERS_CACHE.$$" "$OTHERS_CACHE" 2>/dev/null \
+        || rm -f "$OTHERS_CACHE.$$"
+}
+
+# Фоновый опрос. Своя сессия (setsid) — чтобы закрытие окна не убило и его;
+# flock — чтобы таймер вида, дёргающий скрипт раз в 20 с, не наплодил
+# параллельных опросов, пока первый ещё идёт.
+if [ "${1:-}" = "--probe" ]; then
+    mkdir -p "${OTHERS_CACHE%/*}" 2>/dev/null
+    exec 9>"$OTHERS_CACHE.lock"
+    flock -n 9 || exit 0
+    probe_others
+    save_others
+    exit 0
 fi
 
-if [ -n "$cached" ]; then
-    others="$cached"
-else
+cached=''; stale=1
+if [ -f "$OTHERS_CACHE" ] && jq -e . "$OTHERS_CACHE" >/dev/null 2>&1; then
+    cached="$(cat "$OTHERS_CACHE")"
+    age=$(( $(date +%s) - $(stat -c %Y "$OTHERS_CACHE" 2>/dev/null || echo 0) ))
+    [ "$age" -lt "$OTHERS_TTL" ] && stale=0
+fi
+
+if [ "${1:-}" = "--force" ]; then
     probe_others
-    printf '%s' "$others" >"$OTHERS_CACHE" 2>/dev/null || true
+    save_others
+else
+    # Устаревшее лучше пустого: версии меняются раз в неделю, а пустое окно и
+    # было тем, из-за чего страница казалась сломанной.
+    [ -n "$cached" ] && others="$cached"
+    [ "$stale" = 1 ] && setsid -f bash "$0" --probe </dev/null >/dev/null 2>&1
 fi
 
 add "$(claude_json || true)"
