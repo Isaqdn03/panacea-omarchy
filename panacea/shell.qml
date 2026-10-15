@@ -839,6 +839,8 @@ PanelWindow {
         case "offline":  return root.tr("Нет связи с GitHub");
         case "download": return root.tr("Не удалось скачать обновление");
         case "install":  return root.tr("Установщик завершился с ошибкой");
+        // PANACEA-LOCAL: see applyUpdate()
+        case "local":    return "Self-update is off here: it would overwrite Omarchy's Hyprland config and the local patches. Update by hand.";
         default:         return root.tr("Обновление не удалось");
         }
     }
@@ -860,6 +862,13 @@ PanelWindow {
 
     function applyUpdate() {
         if (root.updBusy) return;
+        // PANACEA-LOCAL: never self-update on Omarchy. update.sh runs upstream's
+        // install.sh, which replaces ~/.config/{hypr,fish,foot,fastfetch,nano}
+        // (Omarchy's hyprland.lua, autostart.lua, monitors.lua) and drops every
+        // local patch. Update by hand: fetch upstream, re-run
+        // apply-local-patches.sh, test, then ~/dev/panacea-omarchy/sync.sh.
+        root.updError = "local";
+        return;
         root.updBusy = true;
         root.updError = "";
         root.updStep = "download";
@@ -3325,11 +3334,27 @@ PanelWindow {
             }
         }
     }
+    // PANACEA-LOCAL: with a single keyboard layout the label can never change,
+    // so the island hides it. Starts true so a failed probe never hides it.
+    property bool kbMulti: true
+    Process {
+        id: pKbCount
+        command: ["sh", "-c",
+            "hyprctl devices -j | jq -r 'first(.keyboards[]|select(.main==true)|.layout)'"]
+        running: true
+        stdout: SplitParser {
+            onRead: line => {
+                var s = line.trim();
+                if (s.length) root.kbMulti = s.indexOf(",") >= 0;
+            }
+        }
+    }
     // Hyprland шлёт activelayout при каждом переключении Alt+Shift
     Connections {
         target: Hyprland
         function onRawEvent(ev) {
             if (ev.name === "activelayout") pKbLayout.running = true;
+            if (ev.name === "configreloaded") pKbCount.running = true;   // PANACEA-LOCAL
         }
     }
 
@@ -5518,6 +5543,7 @@ PanelWindow {
             // текущая раскладка: перелистывается при Alt+Shift
             FlipText {
                 value: root.kbLayout
+                visible: root.kbMulti   // PANACEA-LOCAL
                 textColor: root.kbLayout === "RU" ? root.tint("#7FB3FF") : root.colMuted
                 fontFam: root.fontFam
                 pixelSize: root.fontSize - 2
@@ -6332,6 +6358,7 @@ PanelWindow {
                 Text {
                     Layout.alignment: Qt.AlignHCenter
                     text: root.kbLayout
+                    visible: root.kbMulti   // PANACEA-LOCAL
                     color: root.kbLayout === "RU" ? root.tint("#7FB3FF") : root.colMuted
                     font { family: root.fontFam; pixelSize: root.fontSize - 4; bold: true }
                 }

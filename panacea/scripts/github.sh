@@ -82,13 +82,21 @@ USER_LOGIN="$(gh api user --jq '.login' || true)"
 # Уведомления по умолчанию приходят только непрочитанные — именно это и нужно.
 # Заголовок берём из subject, репозиторий из repository: URL в ответе ведёт в
 # API, а не на сайт, и открывать его человеку бессмысленно.
-notif="$(gh api notifications --jq '
-    [ .[] | { kind: "notification",
-              title: .subject.title,
-              repo: .repository.full_name,
-              reason: .reason,
-              url: "https://github.com/notifications",
-              updated: .updated_at } ]' || echo '[]')"
+#
+# All pages, not just the first: the API returns 50 by default, so the pill
+# sat at exactly 50. Two reasons are dropped because they only echo your own
+# actions: ci_activity (a workflow you triggered finished; the actions section
+# below already shows runs) and state_change (you merged or closed something).
+# On 2026-10-15 they were 71 of 75 unread.
+notif="$(gh api 'notifications?per_page=100' --paginate --slurp | jq '
+    [ add // [] | .[]
+      | select(.reason != "ci_activity" and .reason != "state_change")
+      | { kind: "notification",
+          title: .subject.title,
+          repo: .repository.full_name,
+          reason: .reason,
+          url: "https://github.com/notifications",
+          updated: .updated_at } ]' || echo '[]')"
 
 reviews="$(gh search prs --review-requested=@me --state=open --limit 15 \
              --json number,title,repository,url,updatedAt --jq '

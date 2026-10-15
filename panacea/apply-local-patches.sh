@@ -1020,6 +1020,56 @@ SHELL_EDITS = [
 ''',
      '''    visible: root.cfg.featWidgets && root.surfaceEpoch >= 0   // PANACEA-LOCAL, see root.surfaceEpoch
 ''', "replace"),
+
+    # 28. No self-update (2026-10-15). update.sh apply runs upstream install.sh,
+    #     which replaces ~/.config/{hypr,fish,foot,fastfetch,nano} wholesale and
+    #     wipes these patches. The button only shows when check says "behind",
+    #     but if it ever appears, clicking it now just explains why it is off.
+    ('''    function applyUpdate() {
+        if (root.updBusy) return;
+''', '''        // PANACEA-LOCAL: never self-update on Omarchy. update.sh runs upstream's
+        // install.sh, which replaces ~/.config/{hypr,fish,foot,fastfetch,nano}
+        // (Omarchy's hyprland.lua, autostart.lua, monitors.lua) and drops every
+        // local patch. Update by hand: fetch upstream, re-run
+        // apply-local-patches.sh, test, then ~/dev/panacea-omarchy/sync.sh.
+        root.updError = "local";
+        return;
+''', "after"),
+    ('''        case "install":  return root.tr("Установщик завершился с ошибкой");
+''', '''        // PANACEA-LOCAL: see applyUpdate()
+        case "local":    return "Self-update is off here: it would overwrite Omarchy's Hyprland config and the local patches. Update by hand.";
+''', "after"),
+
+    # 29. The layout label (US/RU) hides when only one layout is configured:
+    #     it could never change, and it cost the island ~30 px (2026-10-15).
+    ('''    // Hyprland шлёт activelayout при каждом переключении Alt+Shift
+''', '''    // PANACEA-LOCAL: with a single keyboard layout the label can never change,
+    // so the island hides it. Starts true so a failed probe never hides it.
+    property bool kbMulti: true
+    Process {
+        id: pKbCount
+        command: ["sh", "-c",
+            "hyprctl devices -j | jq -r 'first(.keyboards[]|select(.main==true)|.layout)'"]
+        running: true
+        stdout: SplitParser {
+            onRead: line => {
+                var s = line.trim();
+                if (s.length) root.kbMulti = s.indexOf(",") >= 0;
+            }
+        }
+    }
+''', "before"),
+    ('''            if (ev.name === "activelayout") pKbLayout.running = true;
+''', '''            if (ev.name === "configreloaded") pKbCount.running = true;   // PANACEA-LOCAL
+''', "after"),
+    ('''            // текущая раскладка: перелистывается при Alt+Shift
+            FlipText {
+                value: root.kbLayout
+''', '''                visible: root.kbMulti   // PANACEA-LOCAL
+''', "after"),
+    ('''                    text: root.kbLayout
+''', '''                    visible: root.kbMulti   // PANACEA-LOCAL
+''', "after"),
 ]
 
 # ------------------------------------------------------------ LauncherView.qml
