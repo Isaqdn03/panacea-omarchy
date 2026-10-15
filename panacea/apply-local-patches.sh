@@ -1105,7 +1105,8 @@ SHELL_EDITS = [
     }
     Timer { id: peekTimer; interval: 4000; onTriggered: root.pillPeek = false }
     property bool edgeReveal: false
-    Timer { id: edgeDwell; interval: 300; onTriggered: root.edgeReveal = revealHover.hovered }
+    // 300 ms on the top edge, which DP-2 shares; a side edge is a wall, so 60.
+    Timer { id: edgeDwell; interval: root.pillSide ? 60 : 300; onTriggered: root.edgeReveal = revealHover.hovered }
     Connections {
         target: revealHover
         function onHoveredChanged() {
@@ -1119,6 +1120,122 @@ SHELL_EDITS = [
 ''', '''        // PANACEA-LOCAL: show the auto-hidden pill for a few seconds (SUPER + `)
         function peek(): void { root.peekPill(); }
 ''', "after"),
+
+    # 31. Left rail (2026-10-15). pillPos "left" turns the pill into a
+    #     full-height rail (RailView.qml) that opens into a full-height drawer.
+    #     Its flares sit where it meets the top and bottom screen edges.
+    #     Transient cards (volume, dictation, Bluetooth...) still appear as a
+    #     small tab at mid-height, so a volume change doesn't slide the rail in.
+    #     The top layouts stay "present but transparent" on side edges, and the
+    #     page Loader keyed off height (a rail is always tall); both would
+    #     swallow the rail's clicks, hence the visible/active changes.
+    ('''    readonly property bool pillSide: pillAtLeft || pillAtRight
+''', '''    // PANACEA-LOCAL: left edge = full-height rail + full-height drawer
+    // (RailView.qml). railTab: a transient card shows as a small mid-height
+    // tab instead. railFull: rail/drawer geometry is in effect.
+    readonly property bool railMode: pillAtLeft
+    readonly property int  railW: 46
+    readonly property bool railTab: railMode && !expanded
+                                    && (osdActive || toastActive || btToastActive
+                                        || acToastActive || recPickActive || voxActive)
+    readonly property bool railFull: railMode && !railTab && !settingsMode
+''', "after"),
+    ('''             : root.pillSide     ? idleThick
+                                 : idleLen
+''', '''             : root.railTab      ? idleLen       // PANACEA-LOCAL: rail's transient tab
+             : root.railMode     ? root.railW    // PANACEA-LOCAL: the rail itself
+             : root.pillSide     ? idleThick
+                                 : idleLen
+''', "replace"),
+    ('''        readonly property real targetH: root.settingsMode ? Math.min(contentH, root.height - 48)
+''', '''                : root.railFull ? root.height           // PANACEA-LOCAL: edge to edge
+                : root.railTab  ? idleThick             // PANACEA-LOCAL
+''', "after"),
+    ('''        height: Math.min(targetH, root.height - root.gap * 2)
+''', '''        height: root.railFull ? root.height : Math.min(targetH, root.height - root.gap * 2)   // PANACEA-LOCAL
+''', "replace"),
+    ('''        topRightRadius:    root.pillAtTop || root.pillAtRight ? edgeR : freeR
+''', '''        // PANACEA-LOCAL: on the rail the flares round these corners instead
+        topRightRadius:    root.railFull ? 0 : (root.pillAtTop || root.pillAtRight ? edgeR : freeR)
+''', "replace"),
+    ('''        bottomRightRadius: root.pillAtBottom || root.pillAtRight ? edgeR : freeR
+''', '''        bottomRightRadius: root.railFull ? 0 : (root.pillAtBottom || root.pillAtRight ? edgeR : freeR)   // PANACEA-LOCAL
+''', "replace"),
+    ('''                visible: (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                opacity: root.pillSide ? 1 : 0
+''', '''                visible: (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                         && !root.railMode   // PANACEA-LOCAL: RailView replaces it
+                opacity: root.pillSide ? 1 : 0
+''', "replace"),
+    ('''            visible: !root.themeNothing && (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.osdActive && !root.toastActive && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+''', '''            visible: !root.themeNothing && (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.osdActive && !root.toastActive && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                     && !root.railMode   // PANACEA-LOCAL: transparent is not enough, it still takes clicks
+''', "replace"),
+    ('''            visible: root.themeNothing && (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+''', '''            visible: root.themeNothing && (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                     && !root.railMode   // PANACEA-LOCAL
+''', "replace"),
+    ('''        // --------------------------------------------------- раскрытая панель
+        Loader {
+            id: contentLoader
+''', '''        // PANACEA-LOCAL: the left rail's content. Hidden while the drawer
+        // opens or closes, so its columns don't slide across the drawer.
+        RailView {
+            sys: root
+            anchors.fill: parent
+            visible: root.railFull && !root.expanded && capsule.width < root.railW + 4
+        }
+
+''', "before"),
+    ('''            active: (root.expanded || capsule.height > root.pillH + 4 || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005))
+''', '''            // PANACEA-LOCAL: on the rail, key off width; it is always tall
+            active: (root.expanded
+                     || (root.railMode ? (!root.railTab && capsule.width > root.railW + 4)
+                                       : capsule.height > root.pillH + 4)
+                     || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005))
+''', "replace"),
+    ('''            yScale: root.pillSide ? -1 : (root.pillAtBottom ? -1 : 1)
+''', '''            yScale: root.railFull ? 1 : (root.pillSide ? -1 : (root.pillAtBottom ? -1 : 1))   // PANACEA-LOCAL
+''', "replace"),
+    ('''        x: root.pillAtLeft  ? 0
+         : root.pillAtRight ? parent.width - width
+                            : Math.round(capsule.x) - width
+        y: root.pillSide ? capsule.y - height
+''', '''        // PANACEA-LOCAL: on the rail, flare into the top screen edge
+        x: root.railFull    ? Math.round(capsule.x + capsule.width)
+         : root.pillAtLeft  ? 0
+         : root.pillAtRight ? parent.width - width
+                            : Math.round(capsule.x) - width
+        y: root.railFull ? 0
+         : root.pillSide ? capsule.y - height
+''', "replace"),
+    ('''            yScale: root.pillSide ? 1 : (root.pillAtBottom ? -1 : 1)
+''', '''            yScale: root.railFull ? -1 : (root.pillSide ? 1 : (root.pillAtBottom ? -1 : 1))   // PANACEA-LOCAL
+''', "replace"),
+    ('''        x: root.pillAtLeft  ? 0
+         : root.pillAtRight ? parent.width - width
+                            : Math.round(capsule.x + capsule.width)
+        y: root.pillSide ? capsule.y + capsule.height
+''', '''        // PANACEA-LOCAL: on the rail, flare into the bottom screen edge
+        x: root.railFull    ? Math.round(capsule.x + capsule.width)
+         : root.pillAtLeft  ? 0
+         : root.pillAtRight ? parent.width - width
+                            : Math.round(capsule.x + capsule.width)
+        y: root.railFull ? parent.height - height
+         : root.pillSide ? capsule.y + capsule.height
+''', "replace"),
+    ('''        Behavior on anchors.leftMargin {
+            NumberAnimation { duration: root.animMs; easing.type: Easing.InOutCubic }
+        }
+''', '''        Behavior on anchors.leftMargin {
+            // PANACEA-LOCAL: the rail slides in fast and decelerates; ease-in-out
+            // spent its first frames barely moving, which read as hover lag.
+            NumberAnimation {
+                duration: root.railMode ? Math.round(root.animMs * 0.65) : root.animMs
+                easing.type: root.railMode ? Easing.OutCubic : Easing.InOutCubic
+            }
+        }
+''', "replace"),
 ]
 
 # ------------------------------------------------------------ LauncherView.qml

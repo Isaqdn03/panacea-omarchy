@@ -1268,6 +1268,15 @@ PanelWindow {
     readonly property bool pillAtRight:  pillPos === "right"
     // у боковых положений капсула стоит по центру высоты, а не у кромки экрана
     readonly property bool pillSide: pillAtLeft || pillAtRight
+    // PANACEA-LOCAL: left edge = full-height rail + full-height drawer
+    // (RailView.qml). railTab: a transient card shows as a small mid-height
+    // tab instead. railFull: rail/drawer geometry is in effect.
+    readonly property bool railMode: pillAtLeft
+    readonly property int  railW: 46
+    readonly property bool railTab: railMode && !expanded
+                                    && (osdActive || toastActive || btToastActive
+                                        || acToastActive || recPickActive || voxActive)
+    readonly property bool railFull: railMode && !railTab && !settingsMode
 
     // ------------------------------------------------- перенос острова мышью
     // Тумблер в настройках; тянут за полосу над часами в раскрытых быстрых
@@ -4195,7 +4204,8 @@ PanelWindow {
     }
     Timer { id: peekTimer; interval: 4000; onTriggered: root.pillPeek = false }
     property bool edgeReveal: false
-    Timer { id: edgeDwell; interval: 300; onTriggered: root.edgeReveal = revealHover.hovered }
+    // 300 ms on the top edge, which DP-2 shares; a side edge is a wall, so 60.
+    Timer { id: edgeDwell; interval: root.pillSide ? 60 : 300; onTriggered: root.edgeReveal = revealHover.hovered }
     Connections {
         target: revealHover
         function onHoveredChanged() {
@@ -4349,7 +4359,12 @@ PanelWindow {
         anchors.leftMargin:   root.pillAtLeft   ? sideMargin : 0
         anchors.rightMargin:  root.pillAtRight  ? sideMargin : 0
         Behavior on anchors.leftMargin {
-            NumberAnimation { duration: root.animMs; easing.type: Easing.InOutCubic }
+            // PANACEA-LOCAL: the rail slides in fast and decelerates; ease-in-out
+            // spent its first frames barely moving, which read as hover lag.
+            NumberAnimation {
+                duration: root.railMode ? Math.round(root.animMs * 0.65) : root.animMs
+                easing.type: root.railMode ? Easing.OutCubic : Easing.InOutCubic
+            }
         }
         Behavior on anchors.rightMargin {
             NumberAnimation { duration: root.animMs; easing.type: Easing.InOutCubic }
@@ -4417,6 +4432,8 @@ PanelWindow {
 
         width: root.settingsMode ? root.settingsW
              : (root.expanded && !root.cfg.pillKeepVisible) ? root.panelW
+             : root.railTab      ? idleLen       // PANACEA-LOCAL: rail's transient tab
+             : root.railMode     ? root.railW    // PANACEA-LOCAL: the rail itself
              : root.pillSide     ? idleThick
                                  : idleLen
         // целевая высота — к ней анимируется height и по ней же сразу
@@ -4462,12 +4479,14 @@ PanelWindow {
         // Раскрытая панель не выше expandedH: страницы бывают длинные, но
         // их высоту ограничивает уже своя прокрутка, а не остров.
         readonly property real targetH: root.settingsMode ? Math.min(contentH, root.height - 48)
+                : root.railFull ? root.height           // PANACEA-LOCAL: edge to edge
+                : root.railTab  ? idleThick             // PANACEA-LOCAL
                 : (root.expanded && !root.cfg.pillKeepVisible) ? Math.min(contentH, root.cfg.expandedH)
                 : root.pillSide ? idleLen
                                 : idleThick
         // Не выше экрана: у боковых кромок вертикальная раскладка страницы
         // отдавала такую высоту, что остров разворачивался во весь экран.
-        height: Math.min(targetH, root.height - root.gap * 2)
+        height: root.railFull ? root.height : Math.min(targetH, root.height - root.gap * 2)   // PANACEA-LOCAL
 
         // Перенос: капсула сдвигается от своего места на dragDX/dragDY. Пока
         // тянут — без анимации, чтобы шла точно за курсором; на отпускании
@@ -4515,9 +4534,10 @@ PanelWindow {
                 : (root.cfg.islandRadius > 0 && !root.cfg.notchMode
                    ? root.cfg.islandRadius : root.pillH / 2)
         topLeftRadius:     root.pillAtTop || root.pillAtLeft  ? edgeR : freeR
-        topRightRadius:    root.pillAtTop || root.pillAtRight ? edgeR : freeR
+        // PANACEA-LOCAL: on the rail the flares round these corners instead
+        topRightRadius:    root.railFull ? 0 : (root.pillAtTop || root.pillAtRight ? edgeR : freeR)
         bottomLeftRadius:  root.pillAtBottom || root.pillAtLeft  ? edgeR : freeR
-        bottomRightRadius: root.pillAtBottom || root.pillAtRight ? edgeR : freeR
+        bottomRightRadius: root.railFull ? 0 : (root.pillAtBottom || root.pillAtRight ? edgeR : freeR)   // PANACEA-LOCAL
         Behavior on topLeftRadius  { NumberAnimation { duration: root.animMs; easing.type: Easing.InOutCubic } }
         Behavior on topRightRadius { NumberAnimation { duration: root.animMs; easing.type: Easing.InOutCubic } }
 
@@ -5328,6 +5348,7 @@ PanelWindow {
             // На теме Nothing свёрнутый остров устроен иначе — его собирает
             // nothingCapsule, а эта раскладка целиком уступает ему место.
             visible: !root.themeNothing && (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.osdActive && !root.toastActive && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                     && !root.railMode   // PANACEA-LOCAL: transparent is not enough, it still takes clicks
             // Прозрачностью, а не visible: у скрытой раскладки implicitWidth
             // равен нулю, и остров считал бы свою длину по пустоте.
             opacity: root.pillSide ? 0 : (visible ? 1 : 0)
@@ -5702,6 +5723,7 @@ PanelWindow {
             anchors.rightMargin: 18
             height: root.pillH
             visible: root.themeNothing && (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                     && !root.railMode   // PANACEA-LOCAL
                      && !root.osdActive && !root.toastActive
             opacity: root.pillSide ? 0 : (visible ? 1 : 0)
             Behavior on opacity { NumberAnimation { duration: root.animFast } }
@@ -6232,6 +6254,7 @@ PanelWindow {
                 width: root.pillH
                 spacing: 7
                 visible: (!root.expanded || (root.cfg.pillKeepVisible && !root.settingsMode)) && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                         && !root.railMode   // PANACEA-LOCAL: RailView replaces it
                 opacity: root.pillSide ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: root.animFast } }
 
@@ -6463,6 +6486,14 @@ PanelWindow {
             }
         }
 
+        // PANACEA-LOCAL: the left rail's content. Hidden while the drawer
+        // opens or closes, so its columns don't slide across the drawer.
+        RailView {
+            sys: root
+            anchors.fill: parent
+            visible: root.railFull && !root.expanded && capsule.width < root.railW + 4
+        }
+
         // --------------------------------------------------- раскрытая панель
         Loader {
             id: contentLoader
@@ -6479,7 +6510,11 @@ PanelWindow {
             // раскрытой панели не рисуем: при старте записи из quick settings
             // панель сворачивается, а её содержимое иначе видно ещё пару кадров
             // позади карточки — экраны «проблёскивали».
-            active: (root.expanded || capsule.height > root.pillH + 4 || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005))
+            // PANACEA-LOCAL: on the rail, key off width; it is always tall
+            active: (root.expanded
+                     || (root.railMode ? (!root.railTab && capsule.width > root.railW + 4)
+                                       : capsule.height > root.pillH + 4)
+                     || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005))
                     && !root.recPickActive && !root.btToastActive
                     && !root.acToastActive && !root.voxActive
             visible: !root.recPickActive && !root.btToastActive && !root.acToastActive && !root.voxActive
@@ -6703,14 +6738,17 @@ PanelWindow {
         r: root.cornerR
         transform: Scale {
             origin.y: root.cornerR / 2
-            yScale: root.pillSide ? -1 : (root.pillAtBottom ? -1 : 1)
+            yScale: root.railFull ? 1 : (root.pillSide ? -1 : (root.pillAtBottom ? -1 : 1))   // PANACEA-LOCAL
         }
         // Округляем: уголок — отдельный элемент со своими координатами, и на
         // полпикселя от капсулы он расходится с ней сглаженной серой щелью.
-        x: root.pillAtLeft  ? 0
+        // PANACEA-LOCAL: on the rail, flare into the top screen edge
+        x: root.railFull    ? Math.round(capsule.x + capsule.width)
+         : root.pillAtLeft  ? 0
          : root.pillAtRight ? parent.width - width
                             : Math.round(capsule.x) - width
-        y: root.pillSide ? capsule.y - height
+        y: root.railFull ? 0
+         : root.pillSide ? capsule.y - height
          : root.pillAtBottom ? parent.height - height : 0
         // Уголки уходят вместе с островом: в настройках он отрывается от
         // кромки, а на карусели обоев прячется целиком.
@@ -6725,14 +6763,17 @@ PanelWindow {
         r: root.cornerR
         transform: Scale {
             origin.y: root.cornerR / 2
-            yScale: root.pillSide ? 1 : (root.pillAtBottom ? -1 : 1)
+            yScale: root.railFull ? -1 : (root.pillSide ? 1 : (root.pillAtBottom ? -1 : 1))   // PANACEA-LOCAL
         }
         // Здесь дробность копится вдвое — из x капсулы и из её ширины, —
         // поэтому именно правый уголок и отходил заметнее левого.
-        x: root.pillAtLeft  ? 0
+        // PANACEA-LOCAL: on the rail, flare into the bottom screen edge
+        x: root.railFull    ? Math.round(capsule.x + capsule.width)
+         : root.pillAtLeft  ? 0
          : root.pillAtRight ? parent.width - width
                             : Math.round(capsule.x + capsule.width)
-        y: root.pillSide ? capsule.y + capsule.height
+        y: root.railFull ? parent.height - height
+         : root.pillSide ? capsule.y + capsule.height
          : root.pillAtBottom ? parent.height - height : 0
         opacity: root.cornersOn ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: root.animFast } }

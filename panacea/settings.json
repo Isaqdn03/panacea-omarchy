@@ -93,7 +93,7 @@
     "pillH": 28,
     "pillKeepVisible": false,
     "pillOverlay": true,
-    "pillPos": "top",
+    "pillPos": "left",
     "pillScreen": "DP-1",
     "recDir": "~/Videos",
     "recFps": 60,
