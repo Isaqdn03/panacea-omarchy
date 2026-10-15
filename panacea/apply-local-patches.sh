@@ -1070,6 +1070,55 @@ SHELL_EDITS = [
     ('''                    text: root.kbLayout
 ''', '''                    visible: root.kbMulti   // PANACEA-LOCAL
 ''', "after"),
+
+    # 30. Auto-hide for a top edge shared with DP-2 (2026-10-15). Live states
+    #     (toasts, dictation, recording...) keep the pill out; SUPER + ` peeks
+    #     via `ipc call pill peek`; the edge strip needs a 300 ms dwell, because
+    #     the pointer crosses DP-1's top edge on every trip to DP-2.
+    #     Settings: pillAutoHide + pillOverlay both true (overlay, or windows
+    #     resize on every reveal).
+    ('''    readonly property bool pillHidden: root.cfg.pillAutoHide
+                                       && !root.expanded && !root.holdOpen
+                                       && !root.osdActive && !root.pillDragging
+                                       && !revealHover.hovered && !capsuleHover.hovered
+''', '''    // PANACEA-LOCAL: auto-hide tuned for a top edge shared with another monitor.
+    // - Anything live keeps the pill out: toasts, dictation, recording, the mic
+    //   picker, Bluetooth/charger cards. Stock kept only volume/brightness.
+    // - pillPeek: SUPER + ` (`qs -c panacea ipc call pill peek`) shows it for
+    //   4 s; a second press puts it away.
+    // - edgeReveal: the edge strip reveals only after a 300 ms dwell. DP-2 sits
+    //   directly above DP-1, so the pointer crosses this edge on every trip
+    //   between monitors, and an instant reveal flashed the pill each time.
+    readonly property bool pillHidden: root.cfg.pillAutoHide
+                                       && !root.expanded && !root.holdOpen
+                                       && !root.osdActive && !root.pillDragging
+                                       && !root.toastActive && !root.voxActive
+                                       && !root.btToastActive && !root.acToastActive
+                                       && !root.recActive && !root.recPickActive
+                                       && !root.pillPeek && !root.edgeReveal
+                                       && !capsuleHover.hovered
+    property bool pillPeek: false
+    function peekPill() {
+        if (root.pillPeek) { root.pillPeek = false; peekTimer.stop(); return; }
+        root.pillPeek = true;
+        peekTimer.restart();
+    }
+    Timer { id: peekTimer; interval: 4000; onTriggered: root.pillPeek = false }
+    property bool edgeReveal: false
+    Timer { id: edgeDwell; interval: 300; onTriggered: root.edgeReveal = revealHover.hovered }
+    Connections {
+        target: revealHover
+        function onHoveredChanged() {
+            if (revealHover.hovered) edgeDwell.restart();
+            else { edgeDwell.stop(); root.edgeReveal = false; }
+        }
+    }
+''', "replace"),
+    ('''    IpcHandler {
+        target: "pill"
+''', '''        // PANACEA-LOCAL: show the auto-hidden pill for a few seconds (SUPER + `)
+        function peek(): void { root.peekPill(); }
+''', "after"),
 ]
 
 # ------------------------------------------------------------ LauncherView.qml

@@ -8,6 +8,10 @@
 o.bind("SUPER + I", "GitHub inbox", "qs -c panacea ipc call pill github")
 o.bind("SUPER + U", "Agent usage", "qs -c panacea ipc call pill agents")
 
+-- The pill auto-hides (QD-OLED burn-in). SUPER + ` shows it for 4 s; press
+-- again to put it away. Bare ` stays the Omarchy menu.
+o.bind("SUPER + grave", "Peek at the pill", "qs -c panacea ipc call pill peek")
+
 -- Glass mode: Hyprland blur plus the terminal's transparent background, on or
 -- off together. The script is the whole feature -- the pill's switch and this
 -- key both just run it, and the pill notices the state change either way.

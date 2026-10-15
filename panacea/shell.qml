@@ -3925,6 +3925,8 @@ PanelWindow {
     // -------------------------------------------------------------------- IPC
     IpcHandler {
         target: "pill"
+        // PANACEA-LOCAL: show the auto-hidden pill for a few seconds (SUPER + `)
+        function peek(): void { root.peekPill(); }
         // индикатор голосового ввода: зовёт voxtype.sh на разных этапах
         function voxListening(): void {
             root.voxState = "listening";
@@ -4169,10 +4171,38 @@ PanelWindow {
     // проваливались мимо, и ползунки не реагировали.
     // Спрятан ли остров прямо сейчас. Всё, ради чего его вообще показывают —
     // раскрытая панель, перетаскивание, громкость — держит его на экране.
+    // PANACEA-LOCAL: auto-hide tuned for a top edge shared with another monitor.
+    // - Anything live keeps the pill out: toasts, dictation, recording, the mic
+    //   picker, Bluetooth/charger cards. Stock kept only volume/brightness.
+    // - pillPeek: SUPER + ` (`qs -c panacea ipc call pill peek`) shows it for
+    //   4 s; a second press puts it away.
+    // - edgeReveal: the edge strip reveals only after a 300 ms dwell. DP-2 sits
+    //   directly above DP-1, so the pointer crosses this edge on every trip
+    //   between monitors, and an instant reveal flashed the pill each time.
     readonly property bool pillHidden: root.cfg.pillAutoHide
                                        && !root.expanded && !root.holdOpen
                                        && !root.osdActive && !root.pillDragging
-                                       && !revealHover.hovered && !capsuleHover.hovered
+                                       && !root.toastActive && !root.voxActive
+                                       && !root.btToastActive && !root.acToastActive
+                                       && !root.recActive && !root.recPickActive
+                                       && !root.pillPeek && !root.edgeReveal
+                                       && !capsuleHover.hovered
+    property bool pillPeek: false
+    function peekPill() {
+        if (root.pillPeek) { root.pillPeek = false; peekTimer.stop(); return; }
+        root.pillPeek = true;
+        peekTimer.restart();
+    }
+    Timer { id: peekTimer; interval: 4000; onTriggered: root.pillPeek = false }
+    property bool edgeReveal: false
+    Timer { id: edgeDwell; interval: 300; onTriggered: root.edgeReveal = revealHover.hovered }
+    Connections {
+        target: revealHover
+        function onHoveredChanged() {
+            if (revealHover.hovered) edgeDwell.restart();
+            else { edgeDwell.stop(); root.edgeReveal = false; }
+        }
+    }
 
     // Появление из-за кромки — не повод раскрываться. Остров выезжает прямо
     // под неподвижный курсор, и раскрытие по наведению срабатывало само:
