@@ -29,7 +29,7 @@ Item {
                 id: wsCell
                 required property int modelData
                 readonly property bool current: modelData === rail.sys.wsId
-                width: 30
+                width: 28
                 height: 26
 
                 Rectangle {

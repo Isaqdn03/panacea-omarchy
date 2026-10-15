@@ -1272,7 +1272,7 @@ PanelWindow {
     // (RailView.qml). railTab: a transient card shows as a small mid-height
     // tab instead. railFull: rail/drawer geometry is in effect.
     readonly property bool railMode: pillAtLeft
-    readonly property int  railW: 46
+    readonly property int  railW: 38
     readonly property bool railTab: railMode && !expanded
                                     && (osdActive || toastActive || btToastActive
                                         || acToastActive || recPickActive || voxActive)
