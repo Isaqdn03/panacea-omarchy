@@ -72,6 +72,8 @@ FocusScope {
             Layout.fillWidth: true
             spacing: 9
 
+            BackButton { sys: view.sys }
+
             Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 38

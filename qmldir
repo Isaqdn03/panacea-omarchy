@@ -4,6 +4,7 @@
 AgentsView 1.0 AgentsView.qml
 AudioView 1.0 AudioView.qml
 AuthView 1.0 AuthView.qml
+BackButton 1.0 BackButton.qml
 CalendarView 1.0 CalendarView.qml
 singleton CavaSource 1.0 CavaSource.qml
 ClipboardView 1.0 ClipboardView.qml

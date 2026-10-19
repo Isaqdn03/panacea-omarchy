@@ -33,6 +33,11 @@ FocusScope {
             Layout.fillWidth: true
             spacing: 12
 
+            BackButton {
+                sys: view.sys
+                before: function () { view.sys.dismissVaultPrompt(); return true; }
+            }
+
             Rectangle {
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40

@@ -306,7 +306,7 @@ Item {
                     Rectangle {
                         id: navArrow
                         required property var modelData
-                        readonly property bool armed: navArrow.modelData.fwd ? view.canForward : view.canBack
+                        readonly property bool armed: navArrow.modelData.fwd ? view.canForward : true
 
                         Layout.preferredWidth: 34
                         Layout.preferredHeight: 28
@@ -330,7 +330,8 @@ Item {
                             hoverEnabled: true
                             enabled: navArrow.armed
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: navArrow.modelData.fwd ? view.forward() : view.back()
+                            onClicked: navArrow.modelData.fwd ? view.forward()
+                                       : (view.canBack ? view.back() : view.sys.goBack())
                         }
                     }
                 }

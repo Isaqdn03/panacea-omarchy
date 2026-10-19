@@ -244,6 +244,8 @@ FocusScope {
             Layout.fillWidth: true
             spacing: 12
 
+            BackButton { sys: view.sys }
+
             Glyph {
                 Layout.preferredWidth: 26
                 Layout.preferredHeight: 26

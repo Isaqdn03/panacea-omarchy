@@ -165,6 +165,7 @@ Item {
             Layout.fillWidth: true
             spacing: 10
 
+            BackButton { sys: view.sys }
             Glyph {
                 glyph: String.fromCodePoint(0xF02A4)   // md-github
                 color: view.sys.colFg

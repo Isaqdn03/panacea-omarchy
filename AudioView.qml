@@ -17,8 +17,7 @@ Item {
         forceActiveFocus();
         pStreams.running = true;
     }
-    function goBack() { view.sys.page = "main"; return true; }
-    Keys.onEscapePressed: view.goBack()
+    Keys.onEscapePressed: view.sys.escapeFromPage()
 
     readonly property var sink: Pipewire.defaultAudioSink
     readonly property var sinkAudio: sink ? sink.audio : null
@@ -103,27 +102,7 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
-            // назад к плиткам
-            Rectangle {
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
-                radius: 10
-                color: backMa.containsMouse ? Qt.rgba(1, 1, 1, 0.13) : Qt.rgba(1, 1, 1, 0.06)
-                Behavior on color { ColorAnimation { duration: 150 } }
-                Text {
-                    anchors.centerIn: parent
-                    text: String.fromCodePoint(0xF004D)
-                    color: view.sys.colMuted
-                    font { family: view.sys.fontFam; pixelSize: view.sys.iconSize - 4 }
-                }
-                MouseArea {
-                    id: backMa
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: view.sys.page = "main"
-                }
-            }
+            BackButton { sys: view.sys }
             Text {
                 Layout.fillWidth: true
                 text: view.sys.tr("Звук")

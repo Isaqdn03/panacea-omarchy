@@ -274,49 +274,56 @@ FocusScope {
         spacing: 10
 
         // ------------------------------------------------------------ поиск
-        Rectangle {
+        RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 42
-            radius: 13
-            color: Qt.rgba(1, 1, 1, 0.06)
-            border.color: input.activeFocus ? Qt.rgba(1, 1, 1, 0.22) : view.sys.colLine
-            border.width: 1
-            Behavior on border.color { ColorAnimation { duration: 150 } }
+            spacing: 9
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 13
-                anchors.rightMargin: 13
-                spacing: 9
+            BackButton { sys: view.sys }
 
-                Text {
-                    text: ""
-                    color: view.sys.colMuted
-                    font { family: view.sys.fontFam; pixelSize: 14 }
-                }
-                TextField {
-                    id: input
-                    focus: true
-                    Layout.fillWidth: true
-                    placeholderText: view.sys.tr("Поиск приложений…")
-                    color: view.sys.colFg
-                    placeholderTextColor: view.sys.colMuted
-                    font { family: view.sys.fontFam; pixelSize: 13 }
-                    background: null
-                    onTextChanged: view.query = text
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 42
+                radius: 13
+                color: Qt.rgba(1, 1, 1, 0.06)
+                border.color: input.activeFocus ? Qt.rgba(1, 1, 1, 0.22) : view.sys.colLine
+                border.width: 1
+                Behavior on border.color { ColorAnimation { duration: 150 } }
 
-                    Keys.onDownPressed:   view.move(1)
-                    Keys.onUpPressed:     view.move(-1)
-                    Keys.onReturnPressed: view.launch()
-                    Keys.onEnterPressed:  view.launch()
-                    Keys.onEscapePressed: view.sys.closeLauncher()
-                    Keys.onTabPressed:    view.move(1)
-                }
-                Text {
-                    visible: view.results.length > 0
-                    text: view.results.length
-                    color: view.sys.colMuted
-                    font { family: view.sys.fontFam; pixelSize: 11 }
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 13
+                    anchors.rightMargin: 13
+                    spacing: 9
+
+                    Text {
+                        text: String.fromCodePoint(0xF0349)   // md-magnify
+                        color: view.sys.colMuted
+                        font { family: view.sys.fontFam; pixelSize: 14 }
+                    }
+                    TextField {
+                        id: input
+                        focus: true
+                        Layout.fillWidth: true
+                        placeholderText: view.sys.tr("Поиск приложений…")
+                        color: view.sys.colFg
+                        placeholderTextColor: view.sys.colMuted
+                        font { family: view.sys.fontFam; pixelSize: 13 }
+                        background: null
+                        onTextChanged: view.query = text
+
+                        Keys.onDownPressed:   view.move(1)
+                        Keys.onUpPressed:     view.move(-1)
+                        Keys.onReturnPressed: view.launch()
+                        Keys.onEnterPressed:  view.launch()
+                        Keys.onEscapePressed: view.sys.closeLauncher()
+                        Keys.onTabPressed:    view.move(1)
+                    }
+                    Text {
+                        visible: view.results.length > 0
+                        text: view.results.length
+                        color: view.sys.colMuted
+                        font { family: view.sys.fontFam; pixelSize: 11 }
+                    }
                 }
             }
         }

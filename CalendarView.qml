@@ -11,7 +11,7 @@ Item {
 
     focus: true
     Component.onCompleted: forceActiveFocus()
-    Keys.onEscapePressed: view.sys.page = "main"
+    Keys.onEscapePressed: view.sys.escapeFromPage()
     Keys.onLeftPressed:  view.shift(-1)
     Keys.onRightPressed: view.shift(1)
 
@@ -88,6 +88,19 @@ Item {
         id: col
         width: parent.width
         spacing: 12
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            BackButton { sys: view.sys }
+            Text {
+                Layout.fillWidth: true
+                text: view.sys.tr("Календарь")
+                color: view.sys.colFg
+                font { family: view.sys.fontFam; pixelSize: view.sys.fontSize + 1; bold: true }
+            }
+        }
 
         RowLayout {
             Layout.fillWidth: true

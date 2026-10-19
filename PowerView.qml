@@ -62,7 +62,7 @@ Item {
     }
 
     focus: true
-    Keys.onEscapePressed: view.sys.collapse()
+    Keys.onEscapePressed: view.sys.escapeFromPage()
     Keys.onReturnPressed: trigger(current)
     Keys.onLeftPressed:  if (current > 0) { current--; armed = -1 }
     Keys.onRightPressed: if (current < actions.length - 1) { current++; armed = -1 }
@@ -73,14 +73,21 @@ Item {
         width: parent.width
         spacing: 14
 
-        Text {
+        RowLayout {
             Layout.fillWidth: true
-            text: view.armed >= 0
-                  ? view.sys.tr("Ещё раз, чтобы подтвердить: ") + view.actions[view.armed].label
-                  : view.sys.tr("Завершение работы")
-            color: view.armed >= 0 ? view.actions[view.armed].accent : view.sys.colFg
-            font { family: view.sys.fontFam; pixelSize: view.sys.fontSize; bold: true }
-            Behavior on color { ColorAnimation { duration: 180 } }
+            spacing: 10
+
+            BackButton { sys: view.sys }
+
+            Text {
+                Layout.fillWidth: true
+                text: view.armed >= 0
+                      ? view.sys.tr("Ещё раз, чтобы подтвердить: ") + view.actions[view.armed].label
+                      : view.sys.tr("Завершение работы")
+                color: view.armed >= 0 ? view.actions[view.armed].accent : view.sys.colFg
+                font { family: view.sys.fontFam; pixelSize: view.sys.fontSize; bold: true }
+                Behavior on color { ColorAnimation { duration: 180 } }
+            }
         }
 
         RowLayout {

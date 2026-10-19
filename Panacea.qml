@@ -928,7 +928,7 @@ PanelWindow {
         // панель закрылась — показываем карточки, накопившиеся за это время
         if (!expanded) toastPump.restart();
     }
-    onPageChanged:     { morphing = true; morphTimer.restart() }
+    onPageChanged:     { morphing = true; morphTimer.restart(); root.trackPage(); }
     // Держим дольше самой анимации: высота страницы приходит с задержкой
     // в кадр-другой, и без запаса второй шаг ехал бы по «быстрой» кривой.
     Timer { id: morphTimer; interval: root.animMs + 140; onTriggered: root.morphing = false }
@@ -941,6 +941,59 @@ PanelWindow {
     // Отдельной страницы плеера нет: играющий трек с кнопками и полосами
     // живёт карточкой на главной, там же, где всё остальное.
     property string page: "main"
+
+    // ------------------------------------------------------------ back
+    // Panels opened while the drawer is open are remembered, so the back
+    // arrow every panel carries (BackButton.qml) and Esc return to where you
+    // came from: Control Center → Wi-Fi → a network menu walks back the same
+    // way. Opening a panel straight from a key or the rail starts a fresh
+    // history (the drawer was closed), and collapse() forgets it.
+    property var pageStack: []
+    property string _pageShown: "main"
+    property bool _pageBack: false
+    // Called from the one onPageChanged handler (QML allows only one).
+    function trackPage() {
+        var from = root._pageShown;
+        root._pageShown = root.page;
+        if (root._pageBack) { root._pageBack = false; return; }
+        if (!root.expanded || from === root.page || from === "auth" || root.page === "auth") return;
+        // Control Center is the hub: arriving there starts the trail over.
+        if (root.page === "main") { root.pageStack = []; return; }
+        var s = root.pageStack.slice();
+        s.push(from);
+        root.pageStack = s.slice(-20);
+    }
+    // The arrow: one step back, or to Control Center when nothing is behind.
+    // False only on Control Center itself.
+    function goBack() {
+        var target = "";
+        if (root.pageStack.length) {
+            var s = root.pageStack.slice();
+            target = s.pop();
+            root.pageStack = s;
+        } else if (root.page !== "main") {
+            target = "main";
+        }
+        if (!target.length) return false;
+        if (root.page === "traymenu") root.trayMenuItem = null;
+        pageResetTimer.stop();
+        root._pageBack = true;
+        root.page = target;
+        root.expanded = true;
+        root.holdOpen = true;
+        return true;
+    }
+    // Esc: back while there is somewhere to go back to, otherwise close. A
+    // panel opened straight from a shortcut closes on Esc, as before.
+    function escapeFromPage() {
+        if (root.pageStack.length) root.goBack();
+        else if (root.page !== "main" && root.cameFromMain) root.goBack();
+        else root.collapse();
+    }
+    // Opened from Control Center's own tiles (Wi-Fi list, Bluetooth, battery)
+    // with nothing else in between: Esc returns to the tiles.
+    readonly property bool cameFromMain: ["wifi", "bt", "battery", "netmenu", "traymenu"].indexOf(root.page) >= 0
+
     // что показывает медиаплеер (страница "media")
     property string mediaPath: ""
     // высота полотна плеера: большую часть экрана, но не впритык
@@ -1264,6 +1317,7 @@ PanelWindow {
     function collapse() {
         expanded = false;
         holdOpen = false;
+        pageStack = [];
         weatherDetailsOpen = false;
         pageResetTimer.restart();
     }
@@ -3740,6 +3794,10 @@ PanelWindow {
             root.saveCfg();
         }
         function close(): void { root.collapse(); }
+        // Same as a panel's back arrow; returns the panel now shown, or "none".
+        function back(): string { return root.goBack() ? root.page : "none"; }
+        // The panel on screen ("main" is Control Center), or "closed".
+        function current(): string { return root.expanded ? root.page : "closed"; }
     }
 
     // ----------------------------------------------------------------- окно
@@ -6237,11 +6295,7 @@ PanelWindow {
             // Сначала спрашиваем вид, есть ли ему куда вернуться: со списка
             // сетей или устройств Escape должен уводить к плиткам, а не
             // захлопывать панель целиком.
-            Keys.onEscapePressed: {
-                var it = contentLoader.item;
-                if (it && typeof it.goBack === "function" && it.goBack()) return;
-                root.collapse();
-            }
+            Keys.onEscapePressed: root.escapeFromPage()
             opacity: root.expanded ? 1 : 0
             Behavior on opacity {
                 NumberAnimation { duration: root.expanded ? root.animFast : 90; easing.type: Easing.OutCubic }

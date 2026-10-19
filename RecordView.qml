@@ -16,8 +16,7 @@ Item {
     }
     // Esc возвращает к плиткам, а не закрывает пилюлю целиком: страницу
     // открыли из quick settings, туда же логично и вернуться.
-    function goBack() { view.sys.page = "main"; return true; }
-    Keys.onEscapePressed: view.goBack()
+    Keys.onEscapePressed: view.sys.escapeFromPage()
 
     readonly property var fpsOptions: [30, 60, 120]
     readonly property var dirOptions: ["~/Videos", "~/Pictures", "~/Desktop", "~/"]
@@ -233,6 +232,8 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
+
+            BackButton { sys: view.sys }
 
             Rectangle {
                 Layout.preferredWidth: 11

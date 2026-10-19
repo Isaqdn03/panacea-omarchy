@@ -25,8 +25,7 @@ FocusScope {
         z: -1
     }
 
-    function goBack() { view.sys.page = "main"; return true; }
-    Keys.onEscapePressed: view.goBack()
+    Keys.onEscapePressed: view.sys.escapeFromPage()
 
     property string editId: ""       // id записи в режиме правки
     property string query: ""
@@ -83,6 +82,8 @@ FocusScope {
         RowLayout {
             Layout.fillWidth: true
             spacing: 12
+
+            BackButton { sys: view.sys }
 
             Rectangle {
                 Layout.preferredWidth: 40

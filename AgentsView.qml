@@ -152,6 +152,7 @@ Item {
             Layout.fillWidth: true
             spacing: 10
 
+            BackButton { sys: view.sys }
             Glyph {
                 glyph: String.fromCodePoint(0xF1719)   // md-robot_outline
                 color: view.sys.colFg

@@ -13,8 +13,7 @@ Item {
     Component.onCompleted: forceActiveFocus()
     // Esc возвращает к плиткам, а не закрывает пилюлю целиком: страницу
     // открыли из quick settings, туда же логично и вернуться.
-    function goBack() { view.sys.page = "main"; return true; }
-    Keys.onEscapePressed: view.goBack()
+    Keys.onEscapePressed: view.sys.escapeFromPage()
 
     ColumnLayout {
         id: col
@@ -24,6 +23,8 @@ Item {
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
+
+            BackButton { sys: view.sys }
 
             Text {
                 Layout.fillWidth: true

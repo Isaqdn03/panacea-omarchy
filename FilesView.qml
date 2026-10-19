@@ -1114,6 +1114,8 @@ Item {
             Layout.fillWidth: true
             spacing: 10
 
+            BackButton { sys: view.sys; visible: !view.windowMode }
+
             Rectangle {
                 Layout.preferredWidth: 40; Layout.preferredHeight: 40
                 radius: 13

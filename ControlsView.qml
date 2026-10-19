@@ -63,34 +63,11 @@ Item {
     focus: true
     Component.onCompleted: forceActiveFocus()
 
-    // Возврат на плитки. Вынесено в функцию, потому что Escape не всегда
-    // доходит сюда: фокус может сидеть в поле пароля Wi-Fi или в списке, и
-    // тогда событие всплывает мимо — до Loader'а в shell.qml. Он зовёт
-    // goBack() сам, и подстраница закрывается вместо всей панели.
-    function goBack() {
-        // с меню сети возвращаемся к списку, а не на плитки: человек пришёл
-        // сюда из списка и туда же ждёт назад
-        if (view.sys.page === "netmenu") {
-            view.sys.page = "wifi";
-            return true;
-        }
-        if (view.sys.page === "wifi" || view.sys.page === "bt"
-            || view.sys.page === "battery") {
-            view.sys.page = "main";
-            return true;
-        }
-        if (view.sys.page === "traymenu") {
-            view.sys.page = "main";
-            view.sys.trayMenuItem = null;
-            return true;
-        }
-        return false;
-    }
-
-    Keys.onEscapePressed: {
-        // с подстраниц Esc возвращает назад, с главной — закрывает панель
-        if (!view.goBack()) view.sys.collapse();
-    }
+    // Back from the sub-pages (Wi-Fi list, network menu, Bluetooth, battery,
+    // tray menu) is the shell's shared navigation: the arrow in each sub-page
+    // header and Esc both walk back the way you came (sys.goBack /
+    // sys.escapeFromPage); on the tiles Esc closes the panel.
+    Keys.onEscapePressed: view.sys.escapeFromPage()
 
     // ------------------------------------------------------- общие компоненты
 
@@ -218,7 +195,7 @@ Item {
             }
 
             Text {
-                text: ""
+                text: String.fromCodePoint(0xF0142)   // md-chevron_right
                 color: bodyMa.containsMouse ? view.sys.colFg : view.sys.colMuted
                 font { family: view.sys.fontFam; pixelSize: 13 }
                 Behavior on color { ColorAnimation { duration: 130 } }
@@ -897,28 +874,16 @@ Item {
     component Header: RowLayout {
         property string title: ""
         property bool busy: false
-        signal back()
+        // Optional step of the page's own before going back; return true when
+        // it handled the click (leaving a tray submenu, say). Otherwise the
+        // arrow is the shell's shared back (sys.goBack).
+        property var beforeBack: null
         signal refresh()
 
         Layout.fillWidth: true
         spacing: 8
 
-        Rectangle {
-            Layout.preferredWidth: 28; Layout.preferredHeight: 28
-            radius: 14
-            color: backMa.containsMouse ? view.sys.colHover : "transparent"
-            Behavior on color { ColorAnimation { duration: 130 } }
-            Text {
-                anchors.centerIn: parent; text: ""
-                color: view.sys.colFg
-                font { family: view.sys.fontFam; pixelSize: 13 }
-            }
-            MouseArea {
-                id: backMa; anchors.fill: parent; hoverEnabled: true
-                cursorShape: Qt.PointingHandCursor
-                onClicked: parent.parent.back()
-            }
-        }
+        BackButton { sys: view.sys; before: parent.beforeBack }
         Text {
             Layout.fillWidth: true
             text: parent.title
@@ -2369,7 +2334,6 @@ Item {
 
             Header {
                 title: view.sys.tr("Батарея")
-                onBack: view.sys.page = "main"
             }
 
             // крупная строка состояния: процент и что происходит сейчас
@@ -2528,7 +2492,7 @@ Item {
             Header {
                 title: view.sys.tr("Сети Wi-Fi")
                 busy: view.sys.wifiBusy
-                onBack: { view.sys.page = "main"; passwordFor = ""; }
+                beforeBack: function () { wifiPage.passwordFor = ""; return false; }
                 onRefresh: view.sys.scanWifi()
             }
 
@@ -2697,7 +2661,6 @@ Item {
             Header {
                 title: wifiPage.menuSsid.length ? wifiPage.menuSsid : view.sys.tr("Сеть")
                 busy: view.sys.wifiBusy
-                onBack: view.sys.page = "wifi"
                 onRefresh: {}
             }
 
@@ -2766,15 +2729,12 @@ Item {
                                 || view.sys.trayMenuItem.title || view.sys.tr("Меню"))
                        : view.sys.tr("Меню")
                 busy: false
-                onBack: {
-                    if (trayPage.chain.length > 0) {
-                        var c = trayPage.chain.slice();
-                        c.pop();
-                        trayPage.chain = c;
-                    } else {
-                        view.sys.page = "main";
-                        view.sys.trayMenuItem = null;
-                    }
+                beforeBack: function () {
+                    if (trayPage.chain.length === 0) return false;
+                    var c = trayPage.chain.slice();
+                    c.pop();
+                    trayPage.chain = c;
+                    return true;
                 }
                 onRefresh: {}
             }
@@ -2845,7 +2805,7 @@ Item {
                             // стрелка у подменю
                             Text {
                                 visible: entry.modelData.hasChildren
-                                text: ""
+                                text: String.fromCodePoint(0xF0142)   // md-chevron_right
                                 color: view.sys.colMuted
                                 font { family: view.sys.fontFam; pixelSize: 11 }
                             }
@@ -2894,7 +2854,6 @@ Item {
             Header {
                 title: view.sys.tr("Устройства Bluetooth")
                 busy: view.sys.btAdapter ? view.sys.btAdapter.discovering : false
-                onBack: view.sys.page = "main"
                 onRefresh: view.sys.scanBt()
             }
 
