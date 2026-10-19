@@ -1,0 +1,64 @@
+# Explicit module listing: Panacea's singletons need one outside a
+# standalone Quickshell config, and with a qmldir present every type is
+# listed so none depends on implicit directory import.
+AgentsView 1.0 AgentsView.qml
+AudioView 1.0 AudioView.qml
+AuthView 1.0 AuthView.qml
+CalendarView 1.0 CalendarView.qml
+singleton CavaSource 1.0 CavaSource.qml
+ClipboardView 1.0 ClipboardView.qml
+ControlsView 1.0 ControlsView.qml
+DotIcon 1.0 DotIcon.qml
+DotText 1.0 DotText.qml
+FilesView 1.0 FilesView.qml
+FlipText 1.0 FlipText.qml
+FocusGrabber 1.0 FocusGrabber.qml
+GithubView 1.0 GithubView.qml
+Glyph 1.0 Glyph.qml
+LanGlyph 1.0 LanGlyph.qml
+LauncherView 1.0 LauncherView.qml
+MaskedShot 1.0 MaskedShot.qml
+MediaView 1.0 MediaView.qml
+singleton MicCavaSource 1.0 MicCavaSource.qml
+MicWaveBars 1.0 MicWaveBars.qml
+NotchCorner 1.0 NotchCorner.qml
+NotchShape 1.0 NotchShape.qml
+NotificationsView 1.0 NotificationsView.qml
+OverviewView 1.0 OverviewView.qml
+Panacea 1.0 Panacea.qml
+PillMock 1.0 PillMock.qml
+PowerView 1.0 PowerView.qml
+RailView 1.0 RailView.qml
+RecordView 1.0 RecordView.qml
+SetAppearance 1.0 SetAppearance.qml
+SetBarIsland 1.0 SetBarIsland.qml
+SetButton 1.0 SetButton.qml
+SetCard 1.0 SetCard.qml
+SetClock 1.0 SetClock.qml
+SetControlCenter 1.0 SetControlCenter.qml
+SetDisplay 1.0 SetDisplay.qml
+SetHeader 1.0 SetHeader.qml
+SetInput 1.0 SetInput.qml
+SetKeys 1.0 SetKeys.qml
+SetLabel 1.0 SetLabel.qml
+SetLauncher 1.0 SetLauncher.qml
+SetLock 1.0 SetLock.qml
+SetMedia 1.0 SetMedia.qml
+SetMotion 1.0 SetMotion.qml
+SetNotifications 1.0 SetNotifications.qml
+SetPick 1.0 SetPick.qml
+SetScroll 1.0 SetScroll.qml
+SetSelect 1.0 SetSelect.qml
+SetSlider 1.0 SetSlider.qml
+SetSystem 1.0 SetSystem.qml
+SettingsView 1.0 SettingsView.qml
+SetToggle 1.0 SetToggle.qml
+SetWeather 1.0 SetWeather.qml
+Translations 1.0 Translations.qml
+VaultSaveView 1.0 VaultSaveView.qml
+VaultView 1.0 VaultView.qml
+WallpapersView 1.0 WallpapersView.qml
+WaveBars 1.0 WaveBars.qml
+WeatherDetailsView 1.0 WeatherDetailsView.qml
+WhatsNewView 1.0 WhatsNewView.qml
+WidgetsView 1.0 WidgetsView.qml

@@ -13,7 +13,7 @@ if [ -f "$CFG" ]; then
 fi
 
 if [ "$PREF" = 1 ]; then
-    OUT=$(qs -c "$HOME/.config/panacea" ipc call pill smartClose 2>/dev/null)
+    OUT=$(omarchy-shell pill smartClose 2>/dev/null)
     if [ "$OUT" = "closed_overlay" ]; then
         exit 0
     fi

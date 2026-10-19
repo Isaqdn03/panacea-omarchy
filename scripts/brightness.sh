@@ -191,9 +191,8 @@ cmd_step() {
 
     # Уровень рисует пилюля: яркость идёт мимо Pipewire, и сама она об
     # изменении не узнает — поэтому говорим ей об этом.
-    if pgrep -x qs >/dev/null 2>&1; then
-        qs -c "$HOME/.config/panacea" ipc call pill brightness "$pct" 2>/dev/null &
-    fi
+    # -q: a no-op when omarchy-shell is not running.
+    omarchy-shell -q pill brightness "$pct" &
 }
 
 case "${1:-}" in

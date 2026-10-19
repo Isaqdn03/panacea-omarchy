@@ -29,7 +29,7 @@ DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
 SHOT=""
 FROZEN=0
 
-ipc() { qs -c "$CFG" ipc call pill "$@" >/dev/null 2>&1; }
+ipc() { omarchy-shell -q pill "$@"; }
 
 # Снять слой обязательно: иначе при отмене или падении на экране навсегда
 # останется висеть картинка, неотличимая от зависшего компьютера.
@@ -66,7 +66,7 @@ OUT="$DIR/$(date +'Screenshot_%Y-%m-%d_%H-%M-%S').png"
 
 if [ "$SNAP" = 1 ]; then
     # Обычный путь: режем уже снятый кадр.
-    python3 "$CFG/scripts/shotcrop.py" "$SHOT" "$GEOM" "$OUT" || exit 1
+    python3 "$(dirname "$(readlink -f "$0")")/shotcrop.py" "$SHOT" "$GEOM" "$OUT" || exit 1
 else
     # Кадра нет — снимаем область прямо сейчас, по живому экрану.
     grim -g "$GEOM" "$OUT" || exit 1

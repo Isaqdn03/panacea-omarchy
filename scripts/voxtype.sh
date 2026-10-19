@@ -17,7 +17,7 @@ PATH="$PATH:/usr/bin:/usr/local/bin:$HOME/.local/bin:/bin:/opt/bin"
 export PATH
 
 CFG="$HOME/.config/panacea"
-ipc() { qs -c "$CFG" ipc call pill "$@" >/dev/null 2>&1; }
+ipc() { omarchy-shell -q pill "$@"; }
 
 find_vox() {
     local p

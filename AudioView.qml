@@ -29,7 +29,7 @@ Item {
 
     Process {
         id: pStreams
-        command: ["sh", "-c", Quickshell.env("HOME") + "/.config/panacea/scripts/audio_streams.sh list"]
+        command: ["sh", "-c", view.sys.scriptDir + "/audio_streams.sh list"]
         stdout: SplitParser {
             onRead: data => {
                 // Не перезаписываем список, если пользователь прямо сейчас тянет ползунок
@@ -59,15 +59,15 @@ Item {
     }
 
     function setAppVolume(streamId, pct) {
-        pStreamAction.command = ["sh", "-c", Quickshell.env("HOME")
-                                 + "/.config/panacea/scripts/audio_streams.sh set-volume "
+        pStreamAction.command = ["sh", "-c", view.sys.scriptDir
+                                 + "/audio_streams.sh set-volume "
                                  + streamId + " " + pct];
         pStreamAction.running = true;
     }
 
     function toggleAppMute(streamId) {
-        pStreamAction.command = ["sh", "-c", Quickshell.env("HOME")
-                                 + "/.config/panacea/scripts/audio_streams.sh toggle-mute "
+        pStreamAction.command = ["sh", "-c", view.sys.scriptDir
+                                 + "/audio_streams.sh toggle-mute "
                                  + streamId];
         pStreamAction.running = true;
         quickRefresh.restart();

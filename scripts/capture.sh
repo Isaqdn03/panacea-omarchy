@@ -14,7 +14,7 @@ case "$1" in
         ;;
     off)
         hyprctl dispatch 'hl.dsp.submap("reset")' >/dev/null
-        qs -c "$HOME/.config/panacea" ipc call pill cancelCapture 2>/dev/null
+        omarchy-shell -q pill cancelCapture
         ;;
     *)
         echo "usage: capture.sh on|off" >&2

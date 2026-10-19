@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "isaqdn.panacea",
+  "name": "Panacea",
+  "version": "2.0.0",
+  "author": "isaqdn",
+  "description": "Panacea's rail and drawer as the Omarchy bar (fork of EnsixD/Panacea 1.0.12)",
+  "kinds": [
+    "bar"
+  ],
+  "entryPoints": {
+    "bar": "Panacea.qml"
+  }
+}

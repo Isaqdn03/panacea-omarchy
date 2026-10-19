@@ -479,7 +479,7 @@ Item {
 
                 Image {
                     Layout.alignment: Qt.AlignHCenter
-                    source: Quickshell.env("HOME") + "/.config/panacea/assets/logo-128.png"
+                    source: view.sys.pluginDir + "/assets/logo-128.png"
                     sourceSize.width: 72
                     sourceSize.height: 72
                     fillMode: Image.PreserveAspectFit

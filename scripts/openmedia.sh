@@ -15,4 +15,4 @@ case "$f" in
 esac
 
 [ -n "$f" ] || exit 1
-exec qs -p "$HOME/.config/panacea" ipc call pill media "$f"
+exec omarchy-shell pill media "$f"

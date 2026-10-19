@@ -24,7 +24,33 @@ import "Themes.js" as Themes
 // Наведение -> плавно раскрывается: без музыки — Wi-Fi и Bluetooth,
 //   с музыкой — плеер. Курсор ушёл -> сворачивается обратно.
 // Super+A -> лаунчер приложений в той же пилюле.
-ShellRoot {
+//
+// Omarchy port: this file is the `bar` entry point of the isaqdn.panacea
+// plugin, loaded inside omarchy-shell (`omarchy bar use isaqdn.panacea`)
+// instead of running as its own `qs -c panacea` process. The windows below
+// are children of this Item rather than of a ShellRoot.
+Item {
+    // ------------------------------------------------ omarchy-shell bar API
+    // Read by the host and its panels (shell.qml api.barHidden/barSize/position,
+    // Ui/PopupCard.qml, notifications/Service.qml). The rail floats over the
+    // windows and reserves its own zone, so report "no bar", exactly like the
+    // isaqdn.no-bar option this replaces: notifications and Omarchy popups
+    // keep the placement they had while Panacea ran as a separate process.
+    property bool barHidden: true
+    property int barSize: 0
+    property string position: "top"
+    property bool vertical: false
+    property color barForeground: "white"
+    property var clickTargets: []
+    function targetBelongsToWindow(target, window) { return false }
+
+    // Assigned by shell.configureBar() when present.
+    property var shell: null
+    property var manifest: null
+    property var barConfig: null
+    property var barWidgetRegistry: null
+    property var pluginRegistry: null
+    property string omarchyPath: ""
 
 PanelWindow {
     id: root
@@ -314,7 +340,7 @@ PanelWindow {
     Process { id: pSound }
     function playSound(name) {
         if (root.cfg.uiSounds === false) return;
-        var p = Quickshell.env("HOME") + "/.config/panacea/sounds/" + name + ".wav";
+        var p = root.pluginDir + "/sounds/" + name + ".wav";
         pSound.command = ["sh", "-c", "command -v pw-play >/dev/null 2>&1 && pw-play \"$1\" >/dev/null 2>&1 || (command -v paplay >/dev/null 2>&1 && paplay \"$1\" >/dev/null 2>&1)", "_", p];
         pSound.running = false;
         pSound.running = true;
@@ -372,7 +398,7 @@ PanelWindow {
         interval: 400
         onTriggered: {
             pGenMon.command = ["sh", "-c",
-                Quickshell.env("HOME") + "/.config/panacea/scripts/genmonitors.sh"];
+                root.scriptDir + "/genmonitors.sh"];
             pGenMon.running = false;
             pGenMon.running = true;
         }
@@ -404,7 +430,7 @@ PanelWindow {
         interval: 160
         onTriggered: {
             pVibrance.command = ["sh", "-c",
-                Quickshell.env("HOME") + "/.config/panacea/scripts/vibrance.sh set "
+                root.scriptDir + "/vibrance.sh set "
                 + root.cfg.vibrance];
             pVibrance.running = false;
             pVibrance.running = true;
@@ -682,7 +708,7 @@ PanelWindow {
     Process {
         id: pLocaleGet
         running: true
-        command: ["sh", "-c", Quickshell.env("HOME") + "/.config/panacea/scripts/locale.sh get"]
+        command: ["sh", "-c", root.scriptDir + "/locale.sh get"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var s = text.trim().split("\n").pop().trim();
@@ -708,7 +734,7 @@ PanelWindow {
 
         root.sysLangPending = true;
         pLocaleSet.command = ["sh", "-c",
-            "pkexec " + Quickshell.env("HOME") + "/.config/panacea/scripts/locale.sh set " + code];
+            "pkexec " + root.scriptDir + "/locale.sh set " + code];
         pLocaleSet.running = false;
         pLocaleSet.running = true;
     }
@@ -853,6 +879,8 @@ PanelWindow {
     property bool updChecking: false
 
     function checkUpdate() {
+        // Omarchy port: this is a fork, there is no upstream to update from.
+        return;
         if (root.updBusy || root.updChecking) return;
         root.updChecking = true;
         root.updError = "";
@@ -1031,7 +1059,7 @@ PanelWindow {
     Process {
         id: pUpdNotify
         command: ["notify-send", "-p", "-a", "Panacea", "-i",
-                  Quickshell.env("HOME") + "/.config/panacea/assets/logo-128.png",
+                  root.pluginDir + "/assets/logo-128.png",
                   root.tr("Доступно обновление Panacea"), root.updSubject]
         stdout: StdioCollector {
             onStreamFinished: root.updNotifId = parseInt(String(text).trim()) || -1
@@ -1129,8 +1157,14 @@ PanelWindow {
     Timer { interval: 45000; running: true; onTriggered: root.checkUpdate() }
     Timer { interval: 6 * 3600 * 1000; running: true; repeat: true; onTriggered: root.checkUpdate() }
 
-    readonly property string scriptDir:
-        Quickshell.env("HOME") + "/.config/panacea/scripts"
+    // Code (scripts, assets, sounds) ships inside the plugin directory; state
+    // (settings.json, .vibrance, caches) stays in ~/.config/panacea. It must:
+    // omarchy-shell reloads every plugin on any write under
+    // ~/.config/omarchy/plugins, so state kept here would restart the rail on
+    // each settings change.
+    readonly property string pluginDir:
+        Qt.resolvedUrl(".").toString().replace(/^file:\/\//, "").replace(/\/$/, "")
+    readonly property string scriptDir: root.pluginDir + "/scripts"
 
     // capture.sh off зовёт этот IPC, чтобы панель сняла режим захвата
     signal cancelCaptureRequested()
@@ -1162,7 +1196,7 @@ PanelWindow {
         root.bindsPending = false;
         bindsFallback.stop();
         pGenBinds.command = ["sh", "-c",
-            Quickshell.env("HOME") + "/.config/panacea/scripts/genbinds.sh"];
+            root.scriptDir + "/genbinds.sh"];
         pGenBinds.running = true;
     }
     // страховка, если сигнала о записи почему-то не будет
@@ -1174,12 +1208,16 @@ PanelWindow {
     // этом оставались на месте, поэтому со стороны это выглядело так, будто
     // сочетания «не сохраняются»: окно Super+/ показывает своё, а нажатия
     // работают заводские. Собираем файл заново, если его нет.
+    // Omarchy port: off. Omarchy's hyprland.lua never loads binds_data.lua, so
+    // the file is always missing and this ran genbinds.sh -- which ends in
+    // `hyprctl reload` -- on every start. Inside omarchy-shell the rail is
+    // rebuilt on each plugin reload, so that would reload Hyprland each time.
     Process {
         id: pBindsHeal
-        running: true
+        running: false
         command: ["sh", "-c",
             "[ -f \"$HOME/.config/hypr/lua/binds_data.lua\" ] "
-            + "|| \"$HOME/.config/panacea/scripts/genbinds.sh\""]
+            + "|| \"" + root.scriptDir + "/genbinds.sh\""]
     }
     Connections {
         target: cfgFile
@@ -1466,7 +1504,7 @@ PanelWindow {
             root.monReplay();
             root.applyInput();
             pVibrance.command = ["sh", "-c",
-                Quickshell.env("HOME") + "/.config/panacea/scripts/vibrance.sh set "
+                root.scriptDir + "/vibrance.sh set "
                 + root.cfg.vibrance];
             pVibrance.running = false;
             pVibrance.running = true;
@@ -2110,7 +2148,7 @@ PanelWindow {
     Process {
         id: pMachine
         running: true
-        command: ["sh", "-c", Quickshell.env("HOME") + "/.config/panacea/scripts/brightness.sh detect"]
+        command: ["sh", "-c", root.scriptDir + "/brightness.sh detect"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var t = text.slice(text.lastIndexOf("backend="));
@@ -2312,7 +2350,7 @@ PanelWindow {
 
     Process {
         id: pLoad
-        command: ["sh", "-c", Quickshell.env("HOME") + "/.config/panacea/scripts/sysload.sh"]
+        command: ["sh", "-c", root.scriptDir + "/sysload.sh"]
         stdout: StdioCollector {
             onStreamFinished: {
                 // Сборщик копит вывод всех запусков подряд, поэтому берём
@@ -2353,7 +2391,7 @@ PanelWindow {
 
     Process {
         id: pBrightList
-        command: ["sh", "-c", Quickshell.env("HOME") + "/.config/panacea/scripts/brightness.sh list"]
+        command: ["sh", "-c", root.scriptDir + "/brightness.sh list"]
         stdout: StdioCollector {
             onStreamFinished: {
                 var out = [];
@@ -2374,7 +2412,7 @@ PanelWindow {
         if (root.brightBackend === "none") return;
         root.brightBusy = true;
         pBrightList.command = ["sh", "-c",
-            Quickshell.env("HOME") + "/.config/panacea/scripts/brightness.sh "
+            root.scriptDir + "/brightness.sh "
             + (rescan ? "rescan" : "list")];
         pBrightList.running = false;
         pBrightList.running = true;
@@ -2400,7 +2438,7 @@ PanelWindow {
         onTriggered: {
             if (root.brightPendingPct < 0) return;
             pBrightSet.command = ["sh", "-c",
-                Quickshell.env("HOME") + "/.config/panacea/scripts/brightness.sh set "
+                root.scriptDir + "/brightness.sh set "
                 + root.brightPendingId + " " + root.brightPendingPct];
             pBrightSet.running = false;
             pBrightSet.running = true;
@@ -2563,8 +2601,7 @@ PanelWindow {
     // открывалась мгновенно уже с первого раза.
     Process {
         running: true
-        command: ["sh", "-c", Quickshell.env("HOME")
-                  + "/.config/panacea/scripts/thumbs.sh all"]
+        command: ["sh", "-c", root.scriptDir + "/thumbs.sh all"]
     }
 
     // ------------------------------------------------------------ системный трей
@@ -2949,7 +2986,7 @@ PanelWindow {
     }
     function vaultLoad() {
         pVaultLoad.command = ["sh", "-c",
-            Quickshell.env("HOME") + "/.config/panacea/scripts/vault.sh load"];
+            root.scriptDir + "/vault.sh load"];
         pVaultLoad.running = true;
         pVaultLoad.write(root.vaultKey + "\n");
         pVaultLoad.stdinEnabled = false;
@@ -2993,7 +3030,7 @@ PanelWindow {
         root.vaultDirty = false;
         pVaultSave.stdinEnabled = true;
         pVaultSave.command = ["sh", "-c",
-            Quickshell.env("HOME") + "/.config/panacea/scripts/vault.sh save"];
+            root.scriptDir + "/vault.sh save"];
         pVaultSave.running = true;
         pVaultSave.write(root.vaultKey + "\n" + JSON.stringify(root.vaultEntries));
         pVaultSave.stdinEnabled = false;
@@ -3250,7 +3287,7 @@ PanelWindow {
 
     // ------------------------------------------------------- профиль питания
     readonly property string powerScript:
-        Quickshell.env("HOME") + "/.config/panacea/scripts/power.sh"
+        root.scriptDir + "/power.sh"
 
     // "power-saver" | "balanced" | "performance"
     property string powerProfile: "balanced"
@@ -3413,7 +3450,7 @@ PanelWindow {
     }
 
     // ------------------------------------------------------------------ Wi-Fi
-    readonly property string wifiScript: Quickshell.env("HOME") + "/.config/panacea/scripts/wifi.sh"
+    readonly property string wifiScript: root.scriptDir + "/wifi.sh"
 
     property bool wifiOn: true
     property string wifiSsid: ""
