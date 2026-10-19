@@ -3,6 +3,9 @@ import QtQuick.Layouts
 
 // Notifications. Главное здесь — «не беспокоить» и время жизни карточки.
 // Важные уведомления по умолчанию не гаснут сами: на них отвечают.
+//
+// Panacea is the notification daemon on this Omarchy install (Omarchy's own
+// notification service is disabled), so these apply to every notification.
 ColumnLayout {
     id: page
 
@@ -16,14 +19,21 @@ ColumnLayout {
 
         SetToggle {
             sys: page.sys
-            label: page.sys.tr("Служба уведомлений")
-            sub: page.sys.tr("Выключить, если в системе уже стоит свой демон уведомлений.")
-            on: page.sys.cfg.featNotifications
-            onToggled: v => { page.sys.cfg.featNotifications = v; page.sys.saveCfg(); }
+            label: "Do not disturb"
+            sub: "Only critical notifications get through; the rest go straight to the history. "
+                 + "Same switch as Omarchy's notification silencing."
+            on: page.sys.dnd
+            onToggled: v => page.sys.setDnd(v)
         }
 
-        // «Не беспокоить» переключается кнопкой в быстрых настройках —
-        // это состояние на каждый день, а не настройка.
+        Text {
+            Layout.fillWidth: true
+            text: "Omarchy's notification keys work here too: SUPER + , dismisses, SUPER + SHIFT + , "
+                  + "dismisses all, SUPER + ALT + , opens the last one, SUPER + SHIFT + ALT + , shows the history."
+            color: page.sys.colMuted
+            wrapMode: Text.WordWrap
+            font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
+        }
     }
 
     SetCard {

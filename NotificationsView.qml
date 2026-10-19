@@ -123,6 +123,7 @@ Item {
                 required property string nBody
                 required property string nApp
                 required property string nImage
+                required property string nGlyph
                 required property bool   nUrgent
                 required property string nTime
 
@@ -163,7 +164,8 @@ Item {
                         Text {
                             anchors.centerIn: parent
                             visible: !rowIcon.visible
-                            text: String.fromCodePoint(row.nUrgent ? 0xF0026 : 0xF009A)
+                            text: row.nGlyph.length ? row.nGlyph
+                                  : String.fromCodePoint(row.nUrgent ? 0xF0026 : 0xF009A)
                             color: row.nUrgent ? view.sys.colCrit : view.sys.colMuted
                             font { family: view.sys.fontFam; pixelSize: view.sys.iconSize - 4 }
                         }

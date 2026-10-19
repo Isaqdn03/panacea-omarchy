@@ -117,6 +117,16 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
+            visible: page.sys.cfg.themeId === "omarchy"
+            text: "Colours follow your Omarchy theme and change with `omarchy theme set`. "
+                  + "Omarchy's Nothing theme also switches on Panacea's Nothing look."
+            color: page.sys.colMuted
+            wrapMode: Text.WordWrap
+            font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
+        }
+
+        Text {
+            Layout.fillWidth: true
             visible: page.sys.cfg.themeId === "default"
             text: page.sys.tr("На теме Default цвет текста и акцент берутся из настроек ниже; у остальных тем они свои.")
             color: page.sys.colMuted

@@ -2233,7 +2233,6 @@ Item {
 
             // колокольчик: активные уведомления и история
             IconBtn {
-                visible: view.sys.cfg.featNotifications
                 glyph: String.fromCodePoint(view.sys.dnd ? 0xF009B : 0xF009A)
                 tip: view.sys.dnd ? view.sys.tr("Не беспокоить") : view.sys.tr("Уведомления")
                 badge: view.sys.notifications.count

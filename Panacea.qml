@@ -14,6 +14,7 @@ import Quickshell.Services.Polkit
 import Quickshell.Services.Pam
 import Quickshell.Bluetooth
 import Quickshell.Hyprland
+import qs.Commons
 import "Themes.js" as Themes
 
 // Одна пилюля на всё.
@@ -116,7 +117,7 @@ PanelWindow {
             // ---------------------------------------------- Appearance
             // Тема палитры, независимая от обоев. "default" — то, что стоит
             // сейчас; остальные перечислены в root.themes.
-            property string themeId: "default"
+            property string themeId: "omarchy"
             // текстовый шрифт и шрифт заголовков
             property string fontBody: "JetBrainsMono Nerd Font"
             property string fontDisplay: "JetBrainsMono Nerd Font"
@@ -185,7 +186,6 @@ PanelWindow {
             property bool   featWifi: true
             property bool   featBluetooth: true
             property bool   featClipboard: true
-            property bool   featNotifications: true
             property bool   featCalendar: true
             property bool   featThemes: true
             property bool   featRecord: true
@@ -223,7 +223,7 @@ PanelWindow {
     readonly property var defaultCfg: ({
         fontFam: "JetBrainsMono Nerd Font", fontBody: "JetBrainsMono Nerd Font",
         fontDisplay: "JetBrainsMono Nerd Font", fontSize: 15, iconSize: 17,
-        colFg: "#ffffff", colOn: "#3b82f6", mutedAlpha: 0.45, themeId: "default",
+        colFg: "#ffffff", colOn: "#3b82f6", mutedAlpha: 0.45, themeId: "omarchy",
         spacingUnit: 8, smallRadius: 10,
         pillH: 38, pillPos: "top", pillScreen: "auto", pillAutoHide: false, pillOverlay: true,
         pillKeepVisible: false, closePanaceaFirst: true,
@@ -708,13 +708,62 @@ PanelWindow {
     // не картинка на столе. Тема «default» — то, что было раньше: фон чёрный,
     // а текст и акцент берутся из настроек, поэтому вручную выбранные цвета
     // никуда не деваются.
-    readonly property var themes: Themes.list
-    function themeOf(id) { return Themes.of(id); }
+    //
+    // "omarchy" (the default) follows the active Omarchy theme, live: bar
+    // background and text, accent and urgent come from omarchy-shell's Color
+    // singleton (qs.Commons), which `omarchy theme set` updates over IPC; green
+    // and yellow (ok / warn) come from the theme's colors.toml. Omarchy's
+    // "nothing" theme also turns on Panacea's Nothing look.
+    property string omarchyThemeName: ""
+    property var omarchyPalette: ({})      // colors.toml key -> "#rrggbb"
+    FileView {
+        path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme.name"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.omarchyThemeName = String(text()).trim()
+    }
+    FileView {
+        id: omarchyColorsFile
+        path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/colors.toml"
+        printErrors: false
+        onLoaded: {
+            var out = {}, lines = String(text()).split("\n");
+            for (var i = 0; i < lines.length; i++) {
+                var m = lines[i].match(/^\s*([A-Za-z0-9_-]+)\s*=\s*["']?(#[0-9A-Fa-f]{6})/);
+                if (m) out[m[1]] = m[2];
+            }
+            root.omarchyPalette = out;
+        }
+    }
+    // The theme directory is replaced on a switch, so a file watch would go
+    // stale; Color changing is the reliable signal to read colors.toml again.
+    Connections {
+        target: Color
+        function onAccentChanged() { omarchyColorsFile.reload(); }
+        function onBackgroundChanged() { omarchyColorsFile.reload(); }
+        function onForegroundChanged() { omarchyColorsFile.reload(); }
+    }
+    readonly property var omarchyTheme: ({
+        id: "omarchy",
+        name: "Omarchy" + (root.omarchyThemeName.length ? " · " + root.omarchyThemeName : ""),
+        bg: String(Color.bar.background),
+        fg: String(Color.bar.text),
+        on: String(Color.accent),
+        ok: root.omarchyPalette.green || root.omarchyPalette.color2 || String(Color.accent),
+        crit: String(Color.urgent),
+        warn: root.omarchyPalette.yellow || root.omarchyPalette.color3 || "#fbbf24"
+    })
+
+    readonly property var themes: [root.omarchyTheme].concat(Themes.list)
+    function themeOf(id) { return id === "omarchy" ? root.omarchyTheme : Themes.of(id); }
     readonly property var theme: themeOf(cfg.themeId)
     readonly property bool themeCustom: cfg.themeId === "default"
+    readonly property bool themeOmarchy: cfg.themeId === "omarchy"
     // Единственный флаг на весь облик Nothing. Проверять cfg.themeId по строке
     // в двух десятках мест значило бы искать их все при переименовании темы.
     readonly property bool themeNothing: cfg.themeId === "nothing"
+                                         || (themeOmarchy && omarchyThemeName === "nothing")
 
     // Размер точки в числах Nothing. Считается от размера шрифта, а не задан
     // числом: человек двигает ползунок кегля в настройках, и точечные часы
@@ -744,7 +793,11 @@ PanelWindow {
     readonly property color colMuted:  Qt.rgba(colFg.r, colFg.g, colFg.b, cfg.mutedAlpha)
     readonly property color colLine:   Qt.rgba(colFg.r, colFg.g, colFg.b, 0.10)
     readonly property color colHover:  Qt.rgba(colFg.r, colFg.g, colFg.b, 0.10)
-    readonly property color colOn:     themeCustom ? cfg.colOn : theme.on
+    // Nothing look under an Omarchy theme: highlight by brightness (the text
+    // colour), keep the theme's accent for alerts -- the rule both Panacea's
+    // Nothing and Omarchy's Nothing theme follow.
+    readonly property color colOn:     themeCustom ? cfg.colOn
+                                       : (themeOmarchy && themeNothing) ? theme.fg : theme.on
     readonly property color colOk:     theme.ok
     readonly property color colCrit:   theme.crit
 
@@ -758,7 +811,7 @@ PanelWindow {
     // чем: они встречаются в одном-двух местах и означают ровно себя.
     function tint(c) { return root.themeNothing ? root.colFg : c; }
     // янтарный «на паузе» и «осторожно» — он встречается часто
-    readonly property color colWarn: root.tint("#fbbf24")
+    readonly property color colWarn: root.tint(themeOmarchy ? theme.warn : "#fbbf24")
     readonly property string fontFam:  cfg.fontFam
     // текстовый шрифт и шрифт заголовков; пустое значение — общий fontFam
     readonly property string fontBody:    cfg.fontBody || cfg.fontFam
@@ -1229,7 +1282,7 @@ PanelWindow {
             case "wifi":      return cfg.featWifi;
             case "bt":        return cfg.featBluetooth;
             case "clip":      return cfg.featClipboard;
-            case "notif":     return cfg.featNotifications;
+            case "notif":     return true;   // Panacea is the notification daemon
             case "cal":       return cfg.featCalendar;
             case "record":    return cfg.featRecord;
             case "files":     return cfg.featFiles;
@@ -1970,12 +2023,12 @@ PanelWindow {
 
     // ---------------------------------------------------- Omarchy services
     // As the active bar, Panacea gets live read-write proxies for Omarchy's
-    // idle, night light, notification and media services (the host's
+    // idle, night light and media services (the host's
     // pluginFirstPartyServiceFor). Their state is Omarchy's own, so the same
     // switch in Omarchy's menus, `omarchy toggle ...` and here always agree.
+    // (Notifications are Panacea's own: it is the daemon, see below.)
     readonly property var omarchyIdle:  host.shell ? host.shell.firstPartyServiceFor("omarchy.idle") : null
     readonly property var omarchyNight: host.shell ? host.shell.firstPartyServiceFor("omarchy.nightlight") : null
-    readonly property var omarchyNotif: host.shell ? host.shell.firstPartyServiceFor("omarchy.notifications") : null
 
     // ---------------------------------------------------------------- не спать
     // Coffee mode is Omarchy's stay-awake (`omarchy toggle idle`). It used to
@@ -2078,25 +2131,38 @@ PanelWindow {
     // «Не беспокоить» — состояние, а не настройка: его переключает кнопка в
     // быстрых настройках, но живёт оно в файле, чтобы переживать перезапуск и
     // совпадать с тем, что показывает окно настроек.
-    // Omarchy's notification daemon owns Do Not Disturb; Panacea's own
-    // server is off (featNotifications), so its flag would silence nothing.
-    readonly property bool dnd: root.omarchyNotif ? root.omarchyNotif.doNotDisturb === true : false
-    function toggleDnd() {
-        if (root.omarchyNotif) root.omarchyNotif.setDoNotDisturb(!root.omarchyNotif.doNotDisturb);
-        else root.runDetached("omarchy-shell notifications toggleDnd");
-    }
+    //
+    // Omarchy port: Panacea is the session's notification daemon. The
+    // omarchy.notifications service is disabled in shell.json, and Panacea
+    // answers its `notifications` IPC target (further down), so Omarchy's
+    // keys (SUPER + , and friends), its menu's silencing toggle and
+    // `omarchy notification ...` all reach this server. Omarchy's own hints
+    // are honoured: omarchy-glyph (icon) and omarchy-exec-argv (click action).
+    readonly property bool dnd: cfg.notifDnd
+    function setDnd(on) { cfg.notifDnd = on === true; root.saveCfg(); }
+    function toggleDnd() { root.setDnd(!cfg.notifDnd); }
     property var  notifCurrent: null         // то, что показывается сейчас
     ListModel { id: notifModel }             // история
     readonly property var notifications: notifModel
-    // Демон уведомлений живёт в Loader: если функция выключена установщиком,
-    // сервер не создаётся и остров не регистрируется как daemon — тогда
-    // работает уже установленный mako/dunst без спора за шину.
-    readonly property bool hasNotifications: cfg.featNotifications
+    readonly property bool hasNotifications: true
     property var notifServer: notifLoader.item
     Loader {
         id: notifLoader
-        active: root.cfg.featNotifications
+        active: true
         sourceComponent: notifServerComp
+    }
+
+    // Omarchy's notification hints (see omarchy-notification-send).
+    function notifHint(n, key) {
+        var v = n && n.hints ? n.hints[key] : undefined;
+        return v === undefined || v === null ? "" : String(v);
+    }
+    // ["prog", "arg", ...] from omarchy-exec-argv, or [] when absent/invalid.
+    function notifExecArgv(raw) {
+        try {
+            var a = JSON.parse(String(raw || ""));
+            return Array.isArray(a) && a.length && a.every(x => typeof x === "string") ? a : [];
+        } catch (e) { return []; }
     }
     // живые уведомления, которые ещё не закрыты программой или пользователем
     readonly property var activeNotifications:
@@ -2146,7 +2212,17 @@ PanelWindow {
             n = root.notifObjs[String(id)] || null;
         }
         var hint = "";
-        if (n) {
+        // Omarchy's own notifications carry their click action as an argv
+        // (omarchy-exec-argv); the history row keeps a copy for when the live
+        // object is gone.
+        var argv = root.notifExecArgv(n ? root.notifHint(n, "omarchy-exec-argv") : "");
+        if (!argv.length && id >= 0) {
+            for (var r = 0; r < notifModel.count; r++)
+                if (Number(notifModel.get(r).nId) === id) { argv = root.notifExecArgv(notifModel.get(r).nExec); break; }
+        }
+        if (argv.length) {
+            Quickshell.execDetached(argv);
+        } else if (n) {
             hint = String(n.desktopEntry || "") || String(n.appName || "");
             var acts = n.actions || [];
             var used = false;
@@ -2158,6 +2234,7 @@ PanelWindow {
             // одно действие без имени — тоже почти всегда «открыть»
             if (!used && acts.length === 1) acts[0].invoke();
         }
+        if (n && argv.length) n.dismiss();
         root.focusApp(hint);
         root.dismissToast();
         if (id >= 0) root.dropNotification(id);
@@ -2173,6 +2250,8 @@ PanelWindow {
     readonly property string notifBody:    notifCurrent ? String(notifCurrent.body || "") : ""
     readonly property string notifApp:     notifCurrent ? String(notifCurrent.appName || "") : ""
     readonly property string notifImage:   notifCurrent ? root.notifIconFor(notifCurrent) : ""
+    // Omarchy's omarchy-glyph hint: drawn instead of the bell when there's no image
+    readonly property string notifGlyph:   notifCurrent ? root.notifHint(notifCurrent, "omarchy-glyph") : ""
 
     // notify-send -i отдаёт ИМЯ значка из темы оформления, а не путь к файлу.
     // Image такое имя открыть не может и рисует на его месте «битую картинку»
@@ -2228,6 +2307,8 @@ PanelWindow {
                     nBody: String(n.body || ""),
                     nApp: String(n.appName || ""),
                     nImage: root.notifIconFor(n),
+                    nGlyph: root.notifHint(n, "omarchy-glyph"),
+                    nExec: root.notifHint(n, "omarchy-exec-argv"),
                     nUrgent: n.urgency === NotificationUrgency.Critical,
                     nTime: Qt.formatDateTime(new Date(), "HH:mm")
                 });
@@ -2346,6 +2427,65 @@ PanelWindow {
         for (var i = live.length - 1; i >= 0; i--) {
             if (live[i]) live[i].dismiss();
         }
+    }
+
+    // Omarchy's `notifications` IPC contract (omarchy.notifications is
+    // disabled; see the daemon notes above). Same methods and return values,
+    // so Omarchy's bindings work unchanged:
+    //   SUPER + ,                 dismissOne     SUPER + SHIFT + ,  dismissAll
+    //   SUPER + ALT + ,           invokeLast     SUPER + SHIFT + ALT + ,  showHistory
+    //   omarchy toggle notification silencing -> toggleDnd
+    //   omarchy notification dismiss <summary> -> dismiss
+    // "Popups" are the toast on screen plus the ones queued behind it; they
+    // stay in the history (the Notifications page) when dismissed.
+    IpcHandler {
+        target: "notifications"
+
+        function dndState(): string { return root.dnd ? "on" : "off"; }
+        function toggleDnd(): string { root.toggleDnd(); return dndState(); }
+        function setDnd(value: string): string {
+            var v = String(value || "").toLowerCase();
+            root.setDnd(v === "true" || v === "1" || v === "on" || v === "yes");
+            return dndState();
+        }
+        function isDnd(): string { return dndState(); }
+        function showHistory(): string {
+            if (root.page !== "notif" || !root.expanded) root.togglePage("notif");
+            return "ok";
+        }
+        function clear(): string { notifModel.clear(); return "ok"; }
+        function dismissAll(): string {
+            root.toastQueue = [];
+            root.dismissToast();
+            return "ok";
+        }
+        function dismissOne(): string {
+            if (root.notifCurrent === null) return "none";
+            root.dismissToast();
+            return "ok";
+        }
+        function invokeLast(): string {
+            if (root.notifCurrent === null) return "none";
+            root.activateNotification(root.notifCurrent);
+            return "ok";
+        }
+        function dismiss(summary: string): string {
+            var needle = String(summary || "");
+            if (!needle) return "none";
+            var hit = false;
+            var q = root.toastQueue.filter(function (it) {
+                var match = it.notif && String(it.notif.summary || "").indexOf(needle) !== -1;
+                if (match) hit = true;
+                return !match;
+            });
+            if (hit) root.toastQueue = q;
+            if (root.notifCurrent && String(root.notifCurrent.summary || "").indexOf(needle) !== -1) {
+                root.dismissToast();
+                hit = true;
+            }
+            return hit ? "ok" : "none";
+        }
+        function ping(): string { return "ok"; }
     }
 
     // ------------------------------------------------------- менеджер паролей
@@ -4356,7 +4496,8 @@ PanelWindow {
                 Text {
                     anchors.centerIn: parent
                     visible: !toastIcon.visible
-                    text: String.fromCodePoint(root.notifUrgent ? 0xF0026 : 0xF009A)
+                    text: root.notifGlyph.length ? root.notifGlyph
+                          : String.fromCodePoint(root.notifUrgent ? 0xF0026 : 0xF009A)
                     color: root.notifUrgent ? root.colCrit : root.colFg
                     font { family: root.fontFam; pixelSize: root.iconSize - 1 }
                 }
