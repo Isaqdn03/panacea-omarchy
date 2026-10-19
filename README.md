@@ -1,5 +1,11 @@
 # panacea-omarchy
 
+> **Superseded (2026-10-19):** Panacea now runs as an Omarchy shell **bar plugin**:
+> no separate process, settings saved in Omarchy's own files, colours that follow the
+> Omarchy theme. It lives on the
+> [`omarchy-plugin`](https://github.com/Isaqdn03/panacea-omarchy/tree/omarchy-plugin)
+> branch. This branch is the older standalone setup.
+
 The [Panacea](https://github.com/EnsixD/Panacea) pill, set up as the **top bar on
 Omarchy 4 (Quattro)** — installed alongside Omarchy rather than on top of it, with
 a GitHub inbox page, a Claude agent-usage page, and a rebalanced Nothing-theme
