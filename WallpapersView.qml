@@ -305,9 +305,9 @@ Item {
             spacing: 8
 
             Repeater {
+                // Omarchy has no live (video) backgrounds, so only the still tab.
                 model: [
-                    { m: "still", t: view.sys.tr("Обои") },
-                    { m: "live",  t: view.sys.tr("Живые обои") }
+                    { m: "still", t: view.sys.tr("Обои") }
                 ]
                 Rectangle {
                     id: tabBtn

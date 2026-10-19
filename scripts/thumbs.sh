@@ -10,7 +10,9 @@
 #   all        -> прогреть кеш для всех обоев
 
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/panacea/thumbs"
-WALLS="$HOME/.config/hypr/wallpaper"
+# Omarchy's backgrounds for the current theme: yours, then the theme's.
+THEME_NAME=$(cat "$HOME/.local/state/omarchy/current/theme.name" 2>/dev/null)
+WALLS=("$HOME/.config/omarchy/backgrounds/$THEME_NAME" "$HOME/.local/state/omarchy/current/theme/backgrounds")
 # 480 хватало списку под пилюлей, но в карусели превью растянуто почти на
 # половину экрана — и выглядело мылом. 1100 закрывает карточку с запасом.
 WIDTH=1100
@@ -34,36 +36,9 @@ make_thumb() {
     printf '%s\n' "$dst"
 }
 
-# Фон для экрана блокировки: те же обои, но ужатые под экран.
-# Исходники бывают на 75 мегапикселей — Qt отказывается их декодировать
-# (лимит 256 МБ на картинку), да и открывались бы они полсекунды.
-LOCKBG="${XDG_CACHE_HOME:-$HOME/.cache}/panacea/lockbg"
-LOCK_WIDTH=1920
-
-make_lockbg() {
-    local src="$1"
-    [ -f "$src" ] || return 1
-    mkdir -p "$LOCKBG"
-
-    local name
-    name=$(basename "$src")
-    name="${name%.*}.jpg"
-    local dst="$LOCKBG/$name"
-
-    if [ ! -f "$dst" ] || [ "$src" -nt "$dst" ]; then
-        # уменьшаем только то, что больше экрана; мелкие обои не трогаем
-        ffmpeg -loglevel error -y -i "$src" \
-               -vf "scale='min($LOCK_WIDTH,iw)':-2" -q:v 2 "$dst" </dev/null || return 1
-    fi
-    printf '%s\n' "$dst"
-}
-
 case "$1" in
     thumb)
         make_thumb "$2"
-        ;;
-    lockbg)
-        make_lockbg "$2"
         ;;
     path)
         # Путь к готовой миниатюре — БЕЗ создания. Список обоев вызывает это
@@ -76,15 +51,14 @@ case "$1" in
         [ -f "$dst" ] && [ ! "$src" -nt "$dst" ] && printf '%s\n' "$dst"
         ;;
     all)
-        # Каталог обоев теперь с подкаталогами (custom, shell) — обходим их тоже
-        find "$WALLS" -maxdepth 2 -type f \
+        find -L "${WALLS[@]}" -maxdepth 1 -type f \
              \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' \) \
         | while read -r f; do
             make_thumb "$f" >/dev/null
         done
         ;;
     *)
-        echo "usage: thumbs.sh thumb <path> | lockbg <path> | all" >&2
+        echo "usage: thumbs.sh thumb <path> | all" >&2
         exit 1
         ;;
 esac

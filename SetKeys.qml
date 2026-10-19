@@ -2,9 +2,15 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell.Io
 
-// Быстрые клавиши. Открывается отдельным окном по Super + /, а не разделом
-// настроек: это справочник, к которому обращаются посреди работы, и сайдбар
-// со списком разделов ему только мешал бы.
+// Быстрые клавиши. Открывается отдельным окном, а не разделом настроек: это
+// справочник, к которому обращаются посреди работы, и сайдбар со списком
+// разделов ему только мешал бы.
+//
+// Panacea's own shortcuts (its pages, peek, Glass mode). They live in the
+// managed block of ~/.config/hypr/bindings.lua as ordinary Omarchy o.bind()
+// lines; scripts/hyprconf.py reads them (binds-get) and writes them
+// (binds-set). Window and app shortcuts are Omarchy's and stay in Omarchy's
+// keybindings list (SUPER + K).
 //
 // Правки копятся в черновике и уезжают в Hyprland по «Применить». Сразу не
 // применяем нарочно: полупустое сочетание, записанное по ходу набора, могло
@@ -13,6 +19,29 @@ ColumnLayout {
     id: page
 
     property var sys
+
+    // { actions: [{ id, label, group, combo, default }],
+    //   taken: { "SUPER|v": "Universal paste", ... } } -- Omarchy's binds
+    property var binds: ({ actions: [], taken: ({}) })
+    property bool applying: false
+
+    Process {
+        id: pBinds
+        command: ["/usr/bin/python3", page.sys.scriptDir + "/hyprconf.py", "binds-get"]
+        stdout: SplitParser {
+            onRead: line => {
+                try { page.binds = JSON.parse(line); } catch (e) { return; }
+                // The saved block is back: the draft has become the real thing.
+                if (page.applying) { page.applying = false; page.discardBinds(); }
+            }
+        }
+    }
+    // The shell re-reads Hyprland once its save queue drains.
+    Connections {
+        target: page.sys
+        function onHyprLiveChanged() { pBinds.running = false; pBinds.running = true; }
+        function onHyprErrorChanged() { if (page.sys.hyprError.length) page.applying = false; }
+    }
 
     // ---------------------------------------------------- черновик сочетаний
     property var bindDraft: ({})
@@ -23,11 +52,41 @@ ColumnLayout {
         return false;
     }
 
-    function bindCombo(id) {
-        bindRev;                     // зависимость для пересчёта
-        var raw = page.bindDraft[id] !== undefined
-                  ? String(page.bindDraft[id]) : String(page.sys.cfg["bind_" + id] || "");
-        return page.prettyCombo(raw);
+    function action(id) {
+        var l = page.binds.actions || [];
+        for (var i = 0; i < l.length; i++) if (l[i].id === id) return l[i];
+        return null;
+    }
+    function rawCombo(id) {
+        page.bindRev;                // зависимость для пересчёта
+        if (page.bindDraft[id] !== undefined) return String(page.bindDraft[id]);
+        var a = page.action(id);
+        return a ? String(a.combo || "") : "";
+    }
+    function bindCombo(id) { return page.prettyCombo(page.rawCombo(id)); }
+
+    // Same canonical form as hyprconf.py's combo_key().
+    function comboKey(raw) {
+        var parts = String(raw).split("+").map(p => p.trim()).filter(p => p.length > 0);
+        if (!parts.length) return "";
+        var key = parts.pop().toLowerCase();
+        var mods = parts.map(p => p.toUpperCase());
+        return ["SUPER", "CTRL", "ALT", "SHIFT"].filter(m => mods.indexOf(m) >= 0).join(" + ")
+               + "|" + key;
+    }
+    // What the combo does in Omarchy now -- saving will unbind that.
+    function conflict(id) {
+        var k = page.comboKey(page.rawCombo(id));
+        return k.length ? (page.binds.taken[k] || "") : "";
+    }
+    // Another Panacea action with the same combo (saving refuses that).
+    function twin(id) {
+        var k = page.comboKey(page.rawCombo(id));
+        if (!k.length) return "";
+        var l = page.binds.actions || [];
+        for (var i = 0; i < l.length; i++)
+            if (l[i].id !== id && page.comboKey(page.rawCombo(l[i].id)) === k) return l[i].label;
+        return "";
     }
 
     // Hyprland знает клавиши по именам (slash, comma, period…), а человеку
@@ -47,7 +106,7 @@ ColumnLayout {
         return parts.join(" + ");
     }
     function bindChanged(id) {
-        bindRev;
+        page.bindRev;
         return page.bindDraft[id] !== undefined;
     }
     function setBind(id, combo) {
@@ -58,23 +117,18 @@ ColumnLayout {
     function discardBinds() { page.bindDraft = ({}); page.bindRev++; }
 
     function applyBinds() {
-        var touched = false;
-        for (var id in page.bindDraft) {
-            page.sys.cfg["bind_" + id] = page.bindDraft[id];
-            touched = true;
-        }
-        page.discardBinds();
-        // applyBinds сам сохраняет настройки и пересобирает binds_data.lua
-        if (touched) page.sys.applyBinds();
+        var map = {};
+        (page.binds.actions || []).forEach(a => map[a.id] = page.rawCombo(a.id));
+        page.applying = true;
+        page.sys.hyprRun(["binds-set", JSON.stringify(map)]);
     }
     // «Сбросить» возвращает заводские сочетания, а не просто отменяет правки:
     // в черновик кладём всё, что сейчас отличается от значений по умолчанию.
     function resetBinds() {
         var o = {};
-        var def = page.sys.defaultBinds;
-        for (var id in def) {
-            if (String(page.sys.cfg["bind_" + id] || "") !== def[id]) o[id] = def[id];
-        }
+        (page.binds.actions || []).forEach(a => {
+            if (String(a.combo || "") !== String(a.default || "")) o[a.id] = a.default || "";
+        });
         page.bindDraft = o;
         page.bindRev++;
     }
@@ -248,7 +302,7 @@ ColumnLayout {
         if (page.isShift(event.key)) page.mShift = false;
     }
 
-    Component.onCompleted: page.forceActiveFocus()
+    Component.onCompleted: { pBinds.running = true; page.forceActiveFocus(); }
     Component.onDestruction: {
         // не оставляем систему без горячих клавиш
         if (page.capturingKey.length) page.grabKeys(false);
@@ -262,6 +316,8 @@ ColumnLayout {
         readonly property bool capturing: page.capturingKey === brow.bindId
         readonly property string combo: page.bindCombo(brow.bindId)
         readonly property bool edited: page.bindChanged(brow.bindId)
+        readonly property string clash: page.conflict(brow.bindId)
+        readonly property string twin: page.twin(brow.bindId)
 
         // Строки делят высоту колонки между собой: карточка занимает почти
         // весь экран, и без растяжения список сбивался бы к верхнему краю,
@@ -281,7 +337,8 @@ ColumnLayout {
             color: brow.capturing
                    ? Qt.rgba(page.sys.colOn.r, page.sys.colOn.g, page.sys.colOn.b, 0.20)
                    : (bMa.containsMouse ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(1, 1, 1, 0.07))
-            border.color: brow.capturing ? page.sys.colOn : page.sys.colLine
+            border.color: brow.capturing ? page.sys.colOn
+                          : (brow.twin.length ? page.sys.colCrit : page.sys.colLine)
             border.width: 1
             Behavior on color { ColorAnimation { duration: 160 } }
             Behavior on border.color { ColorAnimation { duration: 160 } }
@@ -324,12 +381,27 @@ ColumnLayout {
             }
         }
 
-        Text {
+        ColumnLayout {
             Layout.fillWidth: true
-            text: brow.label
-            color: page.sys.colMuted
-            elide: Text.ElideRight
-            font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 2 }
+            Layout.alignment: Qt.AlignVCenter
+            spacing: 1
+
+            Text {
+                Layout.fillWidth: true
+                text: brow.label
+                color: page.sys.colMuted
+                elide: Text.ElideRight
+                font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 2 }
+            }
+            Text {
+                Layout.fillWidth: true
+                visible: brow.twin.length > 0 || brow.clash.length > 0
+                text: brow.twin.length ? "Also set for " + brow.twin
+                                       : "Replaces Omarchy's “" + brow.clash + "”"
+                color: brow.twin.length ? page.sys.colCrit : page.sys.colWarn
+                elide: Text.ElideRight
+                font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 5 }
+            }
         }
 
         Text {
@@ -363,19 +435,26 @@ ColumnLayout {
     }
 
     // =========================================================== раскладка
-    // Только то, что можно переназначить: несменяемые сочетания Hyprland
-    // (столы по цифрам, фокус стрелками, мышь) отсюда убраны — в окне, где
-    // каждая строка кликается, нечего показывать строки, которые не кликаются.
-    //
-    // Прокрутки нет: две колонки по пятнадцать строк помещаются целиком, и
+    // Прокрутки нет: две колонки по дюжине строк помещаются целиком, и
     // строки растягиваются по высоте карточки, а не жмутся к верхнему краю.
     Layout.fillWidth: true
     spacing: 10
 
     Text {
         Layout.fillWidth: true
-        text: page.sys.tr("Нажмите на сочетание, чтобы изменить. × убирает клавишу.")
+        text: "Click a shortcut to change it, × removes it. Saved in ~/.config/hypr/bindings.lua. "
+              + "Window and app shortcuts are Omarchy's: SUPER + K lists them all."
         color: Qt.rgba(1, 1, 1, 0.32)
+        wrapMode: Text.WordWrap
+        font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
+    }
+
+    Text {
+        Layout.fillWidth: true
+        visible: page.sys.hyprError.length > 0
+        text: page.sys.hyprError
+        color: page.sys.colCrit
+        wrapMode: Text.WordWrap
         font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
     }
 
@@ -384,59 +463,29 @@ ColumnLayout {
         Layout.fillHeight: true
         spacing: 26
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1     // делим поровну, а не по содержимому
-            spacing: 9
+        Repeater {
+            model: ["Panacea", "More"]
 
-            Head { text: page.sys.tr("Пилюля") }
-            BindRow { bindId: "pillLauncher";  label: page.sys.tr("Лаунчер приложений") }
-            BindRow { bindId: "overview";      label: page.sys.tr("Обзор столов") }
-            BindRow { bindId: "pillControls";  label: page.sys.tr("Wi-Fi, Bluetooth, питание") }
-            BindRow { bindId: "pillSettings";  label: page.sys.tr("Эти настройки") }
-            BindRow { bindId: "pillShortcuts"; label: page.sys.tr("Быстрые клавиши") }
-            BindRow { bindId: "pillWifi";      label: page.sys.tr("Список сетей") }
-            BindRow { bindId: "pillBt";        label: page.sys.tr("Устройства Bluetooth") }
-            BindRow { bindId: "pillClip";      label: page.sys.tr("Буфер обмена") }
-            BindRow { bindId: "pillPower";     label: page.sys.tr("Меню питания") }
-            BindRow { bindId: "pillRecord";    label: page.sys.tr("Запись экрана") }
-            BindRow { bindId: "voxDictate";    label: page.sys.tr("Голос в текст") }
-            BindRow { bindId: "pillNotif";     label: page.sys.tr("Уведомления") }
-            BindRow { bindId: "fileManager";   label: page.sys.tr("Проводник") }
-            BindRow { bindId: "pillVault";     label: page.sys.tr("Менеджер паролей") }
+            ColumnLayout {
+                id: col
+                required property string modelData
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1     // делим поровну, а не по содержимому
+                Layout.alignment: Qt.AlignTop
+                spacing: 9
 
-            Head { text: page.sys.tr("Система") }
-            BindRow { bindId: "screenOff"; label: page.sys.tr("Погасить экран") }
-            BindRow { bindId: "exitHypr";  label: page.sys.tr("Выйти из Hyprland") }
-        }
+                Head { text: col.modelData === "Panacea" ? "Panacea pages" : "More" }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.preferredWidth: 1
-            spacing: 9
-
-            Head { text: page.sys.tr("Приложения") }
-            BindRow { bindId: "terminal";       label: page.sys.tr("Терминал") }
-            BindRow { bindId: "terminalAlt";    label: page.sys.tr("Терминал (запасная)") }
-            BindRow { bindId: "browser";        label: page.sys.tr("Браузер") }
-            BindRow { bindId: "fileManagerTui"; label: page.sys.tr("Файлы в терминале") }
-            BindRow { bindId: "notes";          label: page.sys.tr("Заметки") }
-            BindRow { bindId: "screenshot";     label: page.sys.tr("Скриншот области") }
-            BindRow { bindId: "themeSwitch";    label: page.sys.tr("Смена темы") }
-
-            Head { text: page.sys.tr("Окна") }
-            BindRow { bindId: "closeWindow"; label: page.sys.tr("Закрыть окно") }
-            BindRow { bindId: "fullscreen";  label: page.sys.tr("Во весь экран") }
-            BindRow { bindId: "floatToggle"; label: page.sys.tr("Плавающее окно") }
-            BindRow { bindId: "floatCenter"; label: page.sys.tr("Плавающее по центру") }
-            BindRow { bindId: "toggleSplit"; label: page.sys.tr("Сменить направление сплита") }
-
-            Head { text: page.sys.tr("Рабочие столы") }
-            BindRow { bindId: "emptyWorkspace";   label: page.sys.tr("На пустой стол") }
-            BindRow { bindId: "specialWorkspace"; label: page.sys.tr("Спецстол") }
-            BindRow { bindId: "packWorkspaces";   label: page.sys.tr("Собрать столы подряд") }
+                Repeater {
+                    model: (page.binds.actions || []).filter(a => a.group === col.modelData)
+                    BindRow {
+                        required property var modelData
+                        bindId: modelData.id
+                        label: modelData.label
+                    }
+                }
+            }
         }
     }
 
@@ -445,6 +494,12 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.topMargin: 2
         spacing: 12
+
+        SetButton {
+            sys: page.sys
+            text: "All shortcuts"
+            onClicked: { page.sys.keysWindowOpen = false; page.sys.runDetached("omarchy-menu-keybindings"); }
+        }
 
         Item { Layout.fillWidth: true }
 
@@ -456,9 +511,9 @@ ColumnLayout {
 
         SetButton {
             sys: page.sys
-            text: page.sys.tr("Применить")
+            text: page.applying ? "Saving…" : page.sys.tr("Применить")
             primary: true
-            enabled: page.dirty
+            enabled: page.dirty && !page.applying
             onClicked: page.applyBinds()
         }
     }

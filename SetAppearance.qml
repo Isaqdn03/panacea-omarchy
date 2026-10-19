@@ -144,50 +144,6 @@ ColumnLayout {
             font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
         }
 
-        // Прозрачность терминала. Здесь, а не в отдельной вкладке: это одна
-        // ручка, и стоит она рядом с прочим внешним видом.
-        SetSlider {
-            sys: page.sys
-            label: page.sys.tr("Прозрачность терминала")
-            from: 0.5; to: 1.0; step: 0.01
-            decimals: 2
-            value: page.sys.cfg.termAlpha
-            onMoved: v => {
-                page.sys.cfg.termAlpha = v;
-                page.sys.saveCfg();
-                page.sys.applyTermAlpha();
-            }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            text: page.sys.tr("1.00 — сплошной фон. Действует сразу; если нет — терминал держит свои настройки с прошлого входа, и его серверу нужен перезапуск.")
-            color: page.sys.colMuted
-            wrapMode: Text.WordWrap
-            font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            Item { Layout.fillWidth: true }
-
-            SetButton {
-                sys: page.sys
-                text: page.sys.tr("Перезапустить терминал")
-                onClicked: page.sys.restartTerminalServer()
-            }
-        }
-
-        Text {
-            Layout.fillWidth: true
-            text: page.sys.tr("Открытые окна терминала при этом закроются: они работают от того же сервера.")
-            color: page.sys.colMuted
-            wrapMode: Text.WordWrap
-            font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
-        }
-
         SetSlider {
             sys: page.sys
             label: page.sys.tr("Приглушённый текст")

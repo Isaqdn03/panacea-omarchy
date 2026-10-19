@@ -54,11 +54,11 @@ SetSystem 1.0 SetSystem.qml
 SettingsView 1.0 SettingsView.qml
 SetToggle 1.0 SetToggle.qml
 SetWeather 1.0 SetWeather.qml
+SetWindows 1.0 SetWindows.qml
 Translations 1.0 Translations.qml
 VaultSaveView 1.0 VaultSaveView.qml
 VaultView 1.0 VaultView.qml
 WallpapersView 1.0 WallpapersView.qml
 WaveBars 1.0 WaveBars.qml
 WeatherDetailsView 1.0 WeatherDetailsView.qml
-WhatsNewView 1.0 WhatsNewView.qml
 WidgetsView 1.0 WidgetsView.qml

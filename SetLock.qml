@@ -1,74 +1,121 @@
 import QtQuick
 import QtQuick.Layouts
+import Quickshell.Io
 
-// Lock Screen. Экран блокировки видит любой, кто подойдёт к машине, поэтому
-// показ медиа и уведомлений на нём — отдельные переключатели, а не часть
-// общих настроек этих разделов.
+// Idle & Lock. Omarchy owns the lock screen (omarchy.lock), the screensaver
+// and the idle timer, so this page drives those instead of a lock of its own:
+// timings live in ~/.config/omarchy/shell.json (idle.screensaver / idle.lock)
+// and "stay awake" is Omarchy's `omarchy toggle idle`.
 ColumnLayout {
     id: page
 
     property var sys
+    // { screensaver, lock, stayAwake } -- seconds
+    property var idle: ({ screensaver: 150, lock: 300, stayAwake: false })
+    property int draftSaver: 150
+    property int draftLock: 300
 
     Layout.fillWidth: true
     spacing: 12
+
+    Component.onCompleted: pGet.running = true
+
+    Process {
+        id: pGet
+        command: ["sh", "-c", page.sys.scriptDir + "/omarchy-idle.sh get"]
+        stdout: SplitParser {
+            onRead: line => {
+                try {
+                    page.idle = JSON.parse(line);
+                    page.draftSaver = page.idle.screensaver;
+                    page.draftLock = page.idle.lock;
+                } catch (e) {}
+            }
+        }
+    }
+    Process {
+        id: pSet
+        onExited: { pGet.running = false; pGet.running = true; }
+    }
+    // One write when the handle stops, not one per pixel of drag.
+    Timer {
+        id: saveTimer
+        interval: 500
+        onTriggered: {
+            pSet.command = ["sh", "-c", page.sys.scriptDir + "/omarchy-idle.sh set "
+                            + page.draftSaver + " " + page.draftLock];
+            pSet.running = true;
+        }
+    }
+
+    function minutes(s) {
+        return s < 60 ? s + " s" : (s % 60 === 0 ? (s / 60) + " min" : (s / 60).toFixed(1) + " min");
+    }
 
     SetCard {
         sys: page.sys
 
         SetToggle {
             sys: page.sys
-            label: page.sys.tr("Экран блокировки")
-            sub: page.sys.tr("Выключить, если блокировкой занимается другая программа.")
-            on: page.sys.cfg.featLock
-            onToggled: v => { page.sys.cfg.featLock = v; page.sys.saveCfg(); }
+            label: "Stay awake"
+            sub: page.sys.keepAwake
+                 ? "On: the screensaver and the idle lock never start. Same switch as Coffee mode and `omarchy toggle idle`."
+                 : "Keep the screen on and unlocked while idle. Same switch as Coffee mode and `omarchy toggle idle`."
+            on: page.sys.keepAwake
+            onToggled: v => page.sys.setKeepAwake(v)
+        }
+    }
+
+    SetCard {
+        sys: page.sys
+        opacity: page.sys.keepAwake ? 0.5 : 1
+
+        SetLabel { sys: page.sys; text: "When idle" }
+
+        SetSlider {
+            sys: page.sys
+            label: "Screensaver after"
+            from: 30; to: 3600; step: 30
+            value: page.draftSaver
+            valueText: page.minutes(page.draftSaver)
+            onMoved: v => { page.draftSaver = Math.round(v); saveTimer.restart(); }
         }
 
         SetSlider {
             sys: page.sys
-            label: page.sys.tr("Размытие обоев")
-            from: 0; to: 96; step: 2
-            value: page.sys.cfg.lockBlur
-            suffix: "px"
-            onMoved: v => { page.sys.cfg.lockBlur = v; page.sys.saveCfg(); }
+            label: "Lock after"
+            from: 60; to: 7200; step: 60
+            value: page.draftLock
+            valueText: page.minutes(page.draftLock)
+            onMoved: v => { page.draftLock = Math.round(v); saveTimer.restart(); }
         }
 
+        Text {
+            Layout.fillWidth: true
+            text: "Counted from the start of idle, so the lock can come before or after the screensaver. Saved in ~/.config/omarchy/shell.json."
+            color: page.sys.colMuted
+            wrapMode: Text.WordWrap
+            font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
+        }
     }
-
 
     SetCard {
         sys: page.sys
 
-        SetLabel { sys: page.sys; text: page.sys.tr("Подпись") }
+        SetLabel { sys: page.sys; text: "Lock screen" }
 
-        Rectangle {
+        Text {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
-            radius: 10
-            color: Qt.rgba(page.sys.colFg.r, page.sys.colFg.g, page.sys.colFg.b, 0.07)
+            text: "Omarchy's lock screen, with fingerprint support when it is set up (`omarchy setup security fingerprint`)."
+            color: page.sys.colMuted
+            wrapMode: Text.WordWrap
+            font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
+        }
 
-            TextInput {
-                id: hintInput
-                anchors.fill: parent
-                anchors.leftMargin: 12
-                anchors.rightMargin: 12
-                verticalAlignment: Text.AlignVCenter
-                color: page.sys.colFg
-                clip: true
-                selectByMouse: true
-                text: page.sys.cfg.lockHint
-                font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 2 }
-                onEditingFinished: { page.sys.cfg.lockHint = text; page.sys.saveCfg(); }
-
-                Text {
-                    anchors.fill: parent
-                    verticalAlignment: Text.AlignVCenter
-                    visible: hintInput.text.length === 0
-                    text: page.sys.tr("Строка под полем пароля — например, чей это компьютер")
-                    color: page.sys.colMuted
-                    elide: Text.ElideRight
-                    font: hintInput.font
-                }
-            }
+        SetButton {
+            sys: page.sys
+            text: "Lock now"
+            onClicked: page.sys.runDetached("omarchy-system-lock")
         }
     }
 }

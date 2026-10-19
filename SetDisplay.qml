@@ -7,6 +7,10 @@ import Quickshell.Io
 // на самом рабочем столе, а сюда приходят за цифрами — разрешением, частотой
 // и масштабом. Настройки применяются к одному экрану сразу, без общей кнопки:
 // иначе непонятно, что именно применится.
+//
+// Every change is applied live and saved into ~/.config/hypr/monitors.lua,
+// on that output's own hl.monitor({...}) line (see scripts/hyprconf.py), so
+// it is the same setting Omarchy and a hand edit would make.
 ColumnLayout {
     id: page
 
@@ -14,11 +18,50 @@ ColumnLayout {
 
     // [{ name, desc, w, h, rr, scale, transform, vrr, x, y, modes: [] }]
     property var mons: []
+    // output -> its hl.monitor fields in monitors.lua
+    property var rules: ({})
+    // { enabled, temperature } from `omarchy toggle nightlight --status`
+    property var night: ({ enabled: false })
 
     Layout.fillWidth: true
     spacing: 12
 
-    Component.onCompleted: { pMons.running = true; page.sys.brightRefresh(false); }
+    Component.onCompleted: {
+        pMons.running = true;
+        pRules.running = true;
+        pNight.running = true;
+        page.sys.brightRefresh(false);
+    }
+
+    Process {
+        id: pRules
+        command: ["/usr/bin/python3", page.sys.scriptDir + "/hyprconf.py", "monitors"]
+        stdout: SplitParser {
+            onRead: line => { try { page.rules = JSON.parse(line); } catch (e) {} }
+        }
+    }
+
+    Process {
+        id: pNight
+        command: ["omarchy-toggle-nightlight", "--status"]
+        stdout: SplitParser {
+            onRead: line => { try { page.night = JSON.parse(line); } catch (e) {} }
+        }
+    }
+    Process {
+        id: pNightToggle
+        command: ["omarchy-toggle-nightlight"]
+        onExited: nightRecheck.restart()
+    }
+    // hyprsunset eases into the new temperature; ask again once it has.
+    Timer { id: nightRecheck; interval: 900; onTriggered: { pNight.running = false; pNight.running = true; } }
+
+    // Saves finish asynchronously; the shell re-reads Hyprland when its save
+    // queue drains, which is the moment to re-read the monitors too.
+    Connections {
+        target: page.sys
+        function onHyprLiveChanged() { reload.restart(); }
+    }
 
     // Яркость экрана. На ноутбуке это внутренняя матрица, на ПК — сам монитор
     // по DDC/CI; сводим строку из brightness.sh с карточкой по имени разъёма.
@@ -60,27 +103,41 @@ ColumnLayout {
         }
     }
 
-    // Применяем через оболочку: там же настройка и запоминается, чтобы
-    // пережить hyprctl reload и перезаход — сам Hyprland её не хранит.
+    // Only the fields that changed are passed on; everything else keeps its
+    // live value and its line in monitors.lua stays as it is.
     function apply(m, over) {
-        page.sys.monApply(m.name, {
-            w:  over.w  !== undefined ? over.w  : m.w,
-            h:  over.h  !== undefined ? over.h  : m.h,
-            rr: over.rr !== undefined ? over.rr : m.rr,
-            scale: over.scale !== undefined ? over.scale : m.scale,
-            transform: over.transform !== undefined ? over.transform : m.transform,
-            vrr: m.vrr,
-            // Позицию всегда передаём текущую, а не "auto": иначе смена
-            // разрешения пересобирала бы раскладку и монитор уезжал бы.
-            pos: over.pos !== undefined ? over.pos : page.placeOf(m)
-        });
-        reload.restart();
+        var ch = {};
+        if (over.w !== undefined || over.rr !== undefined) {
+            var w = over.w !== undefined ? over.w : m.w;
+            var h = over.h !== undefined ? over.h : m.h;
+            var rr = over.rr !== undefined ? over.rr : m.rr;
+            ch.mode = w + "x" + h + "@" + Number(rr).toFixed(2);
+        }
+        if (over.scale !== undefined) ch.scale = Number(over.scale).toFixed(4);
+        if (over.transform !== undefined) ch.transform = String(over.transform);
+        if (over.pos !== undefined) ch.position = over.pos;
+        if (over.vrr !== undefined) ch.vrr = over.vrr;
+        page.sys.monApply(m.name, ch);
     }
 
     Timer {
         id: reload
-        interval: 700
-        onTriggered: { pMons.running = false; pMons.running = true; }
+        interval: 300
+        onTriggered: {
+            pMons.running = false; pMons.running = true;
+            pRules.running = false; pRules.running = true;
+        }
+    }
+
+    // Hyprland refused a change (or the file could not be written): say so
+    // instead of leaving the old value on screen without explanation.
+    Text {
+        Layout.fillWidth: true
+        visible: page.sys.hyprError.length > 0
+        text: page.sys.hyprError
+        color: page.sys.colCrit
+        wrapMode: Text.WordWrap
+        font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 4 }
     }
 
     // Куда экран поставлен относительно первого. Читаем из живых координат,
@@ -328,6 +385,53 @@ ColumnLayout {
                 onPicked: id => page.apply(card.modelData, { transform: +id })
             }
 
+            // Per-output VRR. "Default" leaves it out of the monitor line, so
+            // the global misc:vrr (gaming.lua sets it) decides.
+            SetSelect {
+                readonly property var rule: page.rules[card.modelData.name] || ({})
+                sys: page.sys
+                label: "Adaptive sync (VRR)"
+                options: [
+                    { id: "",  text: "Default" },
+                    { id: "0", text: "Off" },
+                    { id: "1", text: "On" },
+                    { id: "2", text: "Fullscreen" }
+                ]
+                value: rule.vrr === undefined ? "" : String(+rule.vrr)
+                onPicked: id => page.apply(card.modelData, { vrr: id })
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: page.rules[card.modelData.name]
+                      ? "Saved in monitors.lua as " + JSON.stringify(page.rules[card.modelData.name])
+                            .replace(/[{}"]/g, "").replace(/,/g, ", ").replace(/:/g, " = ")
+                      : "Not in monitors.lua yet: the first change adds a line for it."
+                color: page.sys.colMuted
+                wrapMode: Text.WrapAnywhere
+                font { family: page.sys.fontBody; pixelSize: page.sys.fontSize - 5 }
+            }
+
+        }
+    }
+
+    // Night light is Omarchy's (hyprsunset); this is its own toggle.
+    SetCard {
+        sys: page.sys
+
+        SetToggle {
+            sys: page.sys
+            label: "Night light"
+            readonly property bool lit: page.sys.omarchyNight
+                                        ? page.sys.omarchyNight.enabled === true
+                                        : page.night.enabled === true
+            sub: "Warmer colours in the evening. Same switch as `omarchy toggle nightlight`."
+            on: lit
+            onToggled: v => {
+                if (v === lit) return;
+                if (page.sys.omarchyNight) page.sys.omarchyNight.setNightlight(v);
+                else pNightToggle.running = true;
+            }
         }
     }
 

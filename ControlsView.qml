@@ -2219,7 +2219,7 @@ Item {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: view.sys.keepAwake = !view.sys.keepAwake
+                    onClicked: view.sys.setKeepAwake(!view.sys.keepAwake)
                 }
             }
 

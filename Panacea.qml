@@ -30,6 +30,8 @@ import "Themes.js" as Themes
 // instead of running as its own `qs -c panacea` process. The windows below
 // are children of this Item rather than of a ShellRoot.
 Item {
+    id: host
+
     // ------------------------------------------------ omarchy-shell bar API
     // Read by the host and its panels (shell.qml api.barHidden/barSize/position,
     // Ui/PopupCard.qml, notifications/Service.qml). The rail floats over the
@@ -84,11 +86,6 @@ PanelWindow {
             // Закрывать оверлей Panacea по Super+Q (иначе убивать фоновое окно)
             property bool   closePanaceaFirst: true
 
-            // Настройки мониторов из вкладки Display, JSON вида
-            // {"eDP-1":{w,h,rr,scale,transform,vrr,pos}}. Hyprland их не
-            // запоминает: hyprctl правит живое состояние, и после перезагрузки
-            // конфига или перезахода экран возвращается к своему конфигу.
-            property string monOverrides: ""
             // На каком экране живёт остров. "auto" — на том, где сейчас
             // фокус: остров переезжает за человеком. Иначе имя выхода
             // ("eDP-1", "DP-2") — остров прибит к нему намертво.
@@ -141,9 +138,6 @@ PanelWindow {
             property int    notifCritTimeout: 0      // 0 — висят до ответа
             property bool   notifPreview: true       // текст в свёрнутом виде
 
-            // ---------------------------------------------- Lock Screen
-            property int    lockBlur: 32
-            property string lockHint: ""
 
             // ---------------------------------------------- Control Center
             // Порядок плиток быстрых настроек, заданный человеком.
@@ -180,15 +174,6 @@ PanelWindow {
             property int    vibrance: 50
 
             // ------------------------------------------------------- мышь
-            // Скорость указателя в понимании libinput: -1 — самая медленная,
-            // 0 — как есть, 1 — самая быстрая. Это не «умножение на два», а
-            // сдвиг кривой, поэтому шаг мелкий.
-            property real   mouseSens: 0
-            // Прямой ввод: libinput перестаёт разгонять указатель за резкое
-            // движение, и одно и то же расстояние по столу всегда даёт одно
-            // и то же расстояние по экрану. То, ради чего в играх выключают
-            // «повышенную точность установки указателя».
-            property bool   mouseRaw: false
 
             // Включённые функции. При установке дотфайлов целиком доступно всё
             // (по умолчанию true); установщик острова выключает то, что человек
@@ -207,7 +192,6 @@ PanelWindow {
             property bool   featFiles: true
             property bool   featMedia: true
             property bool   featVault: true
-            property bool   featLock: true
             property bool   featAudio: true
             property bool   featPowerProfiles: true
             property bool   featOsd: true
@@ -229,83 +213,8 @@ PanelWindow {
             // поверх обоев и меняют вид рабочего стола, а такое включают
             // сами, а не обнаруживают после обновления.
             property bool   featWidgets: false
-
-            // Прозрачность терминала. Живёт здесь, а правится в foot.ini:
-            // сам foot настройки оболочки не читает.
-            property real   termAlpha: 0.90
-
-            // сочетания; пересобираются в lua/binds_data.lua
-            property string bind_pillLauncher: "SUPER + A"
-            property string bind_pillControls: "SUPER + Z"
-            property string bind_pillSettings: "SUPER + I"
-            property string bind_pillShortcuts: "SUPER + slash"
-            property string bind_overview: "SUPER + Tab"
-            property string bind_pillWifi: "SUPER + SHIFT + W"
-            property string bind_pillBt: "SUPER + SHIFT + B"
-            property string bind_pillClip: "SUPER + V"
-            property string bind_pillPower: "CTRL + ALT + delete"
-            property string bind_pillNotif: "SUPER + SHIFT + N"
-            property string bind_pillRecord: "SUPER + P"
-            property string bind_terminal: "SUPER + T"
-            property string bind_terminalAlt: "SUPER + Return"
-            property string bind_closeWindow: "SUPER + Q"
-            property string bind_browser: "SUPER + F"
-            property string bind_fullscreen: "SUPER + SHIFT + F"
-            property string bind_exitHypr: "SUPER + SHIFT + M"
-            property string bind_themeSwitch: "SUPER + SHIFT + T"
-            property string bind_floatToggle: "SUPER + W"
-            property string bind_pillVault: "SUPER + SHIFT + P"
-            // Голос в текст (voxtype): зажми правый Alt — говоришь, отпустил —
-            // вставилось. Обрабатывается парой press/release в keybindings.lua.
-            property string bind_voxDictate: "Alt_R"
-            property string bind_floatCenter: "SUPER + SHIFT + Space"
-            property string bind_fileManager: "SUPER + E"
-            property string bind_fileManagerTui: "SUPER + SHIFT + E"
-            property string bind_toggleSplit: "SUPER + J"
-            property string bind_notes: "SUPER + O"
-            property string bind_screenshot: "SUPER + SHIFT + S"
-            property string bind_screenOff: "SUPER + SHIFT + F12"
-            property string bind_packWorkspaces: "SUPER + SHIFT + A"
-            property string bind_emptyWorkspace: "SUPER + Space"
-            property string bind_specialWorkspace: "SUPER + S"
         }
     }
-    // Заводские сочетания. Держим одним списком, чтобы «Сбросить»
-    // возвращал ровно те значения, что заданы по умолчанию.
-    readonly property var defaultBinds: ({
-        pillLauncher: "SUPER + A",
-        pillControls: "SUPER + Z",
-        pillSettings: "SUPER + I",
-        pillShortcuts: "SUPER + slash",
-        overview:     "SUPER + Tab",
-        pillWifi:     "SUPER + SHIFT + W",
-        pillBt:       "SUPER + SHIFT + B",
-        pillClip:     "SUPER + V",
-        pillPower:    "CTRL + ALT + delete",
-        pillNotif:    "SUPER + SHIFT + N",
-        pillRecord:   "SUPER + P",
-        terminal:       "SUPER + T",
-        terminalAlt:    "SUPER + Return",
-        closeWindow:    "SUPER + Q",
-        browser:        "SUPER + F",
-        fullscreen:     "SUPER + SHIFT + F",
-        exitHypr:       "SUPER + SHIFT + M",
-        themeSwitch:    "SUPER + SHIFT + T",
-        floatToggle:    "SUPER + W",
-        pillVault:      "SUPER + SHIFT + P",
-        voxDictate:     "Alt_R",
-        floatCenter:    "SUPER + SHIFT + Space",
-        fileManager:    "SUPER + E",
-        fileManagerTui: "SUPER + SHIFT + E",
-        toggleSplit:    "SUPER + J",
-        notes:          "SUPER + O",
-        screenshot:     "SUPER + SHIFT + S",
-        screenOff:      "SUPER + SHIFT + F12",
-        packWorkspaces: "SUPER + SHIFT + A",
-        emptyWorkspace: "SUPER + Space",
-        specialWorkspace: "SUPER + S"
-    })
-
     readonly property var cfg: cfgFile.adapter
     function saveCfgNow() { cfgFile.writeAdapter(); }
 
@@ -319,20 +228,18 @@ PanelWindow {
         pillH: 38, pillPos: "top", pillScreen: "auto", pillAutoHide: false, pillOverlay: true,
         pillKeepVisible: false, closePanaceaFirst: true,
         pillDrag: false, panelW: 540,
-        monOverrides: "",
         notchMode: true, notchFlare: 12, collapsedW: 260, expandedH: 620,
         islandGap: 12, islandRadius: 0,
         reduceMotion: false, animMove: 230, animFade: 200, animHover: 150, animBounce: 0,
         clock12: false, clockSeconds: false, clockWeekday: true,
         clockTz: "auto", clockDateFmt: "d MMMM",
         notifDnd: false, notifTimeout: 5000, notifCritTimeout: 0, notifPreview: true,
-        lockBlur: 32, lockHint: "",
         ccLayout: "", filesWindow: false, filesHidden: true, filesMode: "list",
         vaultCapture: true,
-        vibrance: 50, mouseSens: 0, mouseRaw: false,
+        vibrance: 50,
         recFps: 60, recDir: "~/Videos", recSysAudio: false, recMic: false, recMicDevice: "",
         weatherKey: "", weatherCity: "", weatherUnits: "metric",
-        weatherOnIsland: true, featWidgets: false, termAlpha: 0.90,
+        weatherOnIsland: true, featWidgets: false,
         uiSounds: true
     })
 
@@ -351,74 +258,146 @@ PanelWindow {
         root.saveCfg();
     }
 
-    // ------------------------------------------------------- экраны
-    // Одна точка, через которую вкладка Display разговаривает с Hyprland,
-    // и она же — память об этом разговоре.
+    // ------------------------------------------------ Omarchy config files
+    // Settings that belong to Hyprland are saved in Omarchy's own files
+    // (~/.config/hypr/monitors.lua, input.lua, looknfeel.lua) by
+    // scripts/hyprconf.py, just as a hand edit would be. Hyprland and
+    // Omarchy's own tools read them from there, so nothing has to be replayed
+    // after a reload. Panacea used to keep these values in settings.json and
+    // re-send them on every start and every config reload, which silently
+    // overrode monitors.lua and input.lua.
     //
-    // hyprctl keyword отвергается новым (не-legacy) парсером конфига и при
-    // этом выходит с нулевым кодом, поэтому раньше настройки монитора молча
-    // никуда не уезжали. Идём через hyprctl eval и hl.monitor{}, а keyword
-    // оставляем запасным путём для старых конфигов.
-    Process { id: pMon; property string args: ""; command: ["sh", "-c", pMon.args] }
+    // Every save reloads Hyprland, so saves run one at a time from a queue.
+    // Sliders save once the handle stops (hyprSet is debounced), and
+    // `hyprctl eval` applies each value live in the meantime.
+    property string hyprError: ""
+    property var hyprQueue: []
+    property var hyprPending: ({})
+    property var monPending: ({})
 
-    function monCmd(n, o) {
-        var mode = o.w + "x" + o.h + "@" + Number(o.rr).toFixed(2);
-        var lua = "hl.monitor({ output=\"" + n + "\", mode=\"" + mode
-                + "\", position=\"" + o.pos + "\", scale=" + Number(o.scale).toFixed(6)
-                + ", transform=" + o.transform + ", vrr=" + (o.vrr ? 1 : 0) + " })";
-        var legacy = n + "," + mode + "," + o.pos + "," + Number(o.scale).toFixed(6)
-                   + ",transform," + o.transform + ",vrr," + (o.vrr ? 1 : 0);
-        return "out=$(hyprctl eval '" + lua + "' 2>&1); case \"$out\" in ok*) ;; *) "
-             + "hyprctl keyword monitor '" + legacy + "' ;; esac";
+    // Live values for the settings pages: option -> value, refreshed when a
+    // page opens, after every save and after every config reload.
+    property var hyprLive: ({})
+    readonly property var hyprLiveKeys: [
+        "input:sensitivity", "input:accel_profile", "input:scroll_factor",
+        "input:natural_scroll",
+        "input:left_handed", "input:follow_mouse", "input:repeat_rate",
+        "input:repeat_delay", "input:numlock_by_default", "input:kb_layout",
+        "input:kb_options", "input:touchpad:natural_scroll",
+        "input:touchpad:tap-to-click", "input:touchpad:disable_while_typing",
+        "input:touchpad:clickfinger_behavior", "input:touchpad:scroll_factor",
+        "general:gaps_in", "general:gaps_out", "general:border_size",
+        "decoration:rounding", "decoration:dim_inactive",
+        "decoration:dim_strength", "animations:enabled", "misc:vrr"
+    ]
+
+    Process {
+        id: pHyprLive
+        command: ["/usr/bin/python3", root.scriptDir + "/hyprconf.py", "live"].concat(root.hyprLiveKeys)
+        stdout: SplitParser {
+            onRead: line => {
+                try { root.hyprLive = JSON.parse(line); } catch (e) {}
+            }
+        }
+    }
+    function refreshHyprLive() {
+        if (!pHyprLive.running) pHyprLive.running = true;
     }
 
-    function monMap() {
-        try { return JSON.parse(root.cfg.monOverrides || "{}") || ({}); }
-        catch (e) { return ({}); }
+    Process {
+        id: pHyprSave
+        property string err: ""
+        stderr: SplitParser { onRead: line => pHyprSave.err += line + "\n" }
+        onExited: code => {
+            if (code !== 0)
+                root.hyprError = pHyprSave.err.trim().replace(/^hyprconf: /, "")
+                                 || "Saving the Hyprland config failed.";
+            pHyprSave.err = "";
+            root.hyprNext();
+        }
+    }
+    function hyprNext() {
+        if (pHyprSave.running) return;
+        if (!root.hyprQueue.length) { root.refreshHyprLive(); return; }
+        var q = root.hyprQueue.slice();
+        pHyprSave.command = ["/usr/bin/python3", root.scriptDir + "/hyprconf.py"].concat(q.shift());
+        root.hyprQueue = q;
+        pHyprSave.running = true;
+    }
+    function hyprRun(args) {
+        root.hyprError = "";
+        root.hyprQueue = root.hyprQueue.concat([args]);
+        root.hyprNext();
     }
 
-    function monApply(n, o) {
-        pMon.args = root.monCmd(n, o);
-        pMon.running = false;
-        pMon.running = true;
-        var all = root.monMap();
-        all[n] = o;
-        root.cfg.monOverrides = JSON.stringify(all);
-        root.saveCfg();
-        // Компоновщику режим нужен ещё до нашего запуска: Qt привязывает
-        // таймер анимаций к частоте обновления, когда создаёт первое окно, а
-        // мы к тому моменту только стартуем. Пересобираем его конфиг, чтобы в
-        // следующий раз монитор поднялся сразу на своей частоте.
-        genMonTimer.restart();
+    // file: "input" | "looknfeel"; path: "input.touchpad.natural_scroll";
+    // lua: a Lua literal ("0.3", "true", "\"flat\"") or null to remove the
+    // line, which hands the option back to Omarchy's default.
+    Process { id: pHyprEval }
+    Timer { id: hyprSaveTimer; interval: 450; onTriggered: root.hyprFlush() }
+    function hyprSet(file, path, lua) {
+        if (lua !== null) {
+            var parts = path.split("."), body = parts[parts.length - 1] + " = " + lua;
+            for (var i = parts.length - 2; i >= 0; i--) body = parts[i] + " = { " + body + " }";
+            pHyprEval.command = ["hyprctl", "eval", "hl.config({ " + body + " })"];
+            pHyprEval.running = false;
+            pHyprEval.running = true;
+            // Show the new value right away; the save refreshes it for real.
+            try {
+                var live = Object.assign({}, root.hyprLive);
+                live[path.replace(/\./g, ":")] = JSON.parse(lua);
+                root.hyprLive = live;
+            } catch (e) {}
+        }
+        var p = Object.assign({}, root.hyprPending);
+        p[file + " " + path] = lua;
+        root.hyprPending = p;
+        hyprSaveTimer.restart();
     }
-
-    Process { id: pGenMon }
-    Timer {
-        id: genMonTimer
-        interval: 400
-        onTriggered: {
-            pGenMon.command = ["sh", "-c",
-                root.scriptDir + "/genmonitors.sh"];
-            pGenMon.running = false;
-            pGenMon.running = true;
+    function hyprFlush() {
+        var p = root.hyprPending;
+        root.hyprPending = ({});
+        for (var k in p) {
+            var fp = k.split(" ");
+            root.hyprRun(p[k] === null ? ["unset", fp[0], fp[1]] : ["set", fp[0], fp[1], p[k]]);
         }
     }
 
-    // Накатить запомненное заново: на старте оболочки и после каждой
-    // перезагрузки конфига компоновщика — она сбрасывает живые настройки.
-    function monReplay() {
-        var all = root.monMap(), parts = [];
-        for (var n in all) parts.push(root.monCmd(n, all[n]));
-        if (!parts.length) return;
-        pMon.args = parts.join("; ");
-        pMon.running = false;
-        pMon.running = true;
+    // Monitors: applied live and saved into monitors.lua by
+    // `hyprconf.py apply-monitor`, which only touches the fields given here.
+    // changes: { mode: "WxH@RR", scale, transform, position, vrr } -- position
+    // may be relative ("auto-right"); the coordinates Hyprland picks are saved.
+    Timer { id: monSaveTimer; interval: 450; onTriggered: root.monFlush() }
+    function monApply(n, changes) {
+        var p = Object.assign({}, root.monPending);
+        p[n] = Object.assign({}, p[n] || {}, changes);
+        root.monPending = p;
+        monSaveTimer.restart();
+    }
+    function monFlush() {
+        var p = root.monPending;
+        root.monPending = ({});
+        for (var n in p) {
+            var args = ["apply-monitor", n];
+            for (var k in p[n]) args.push(k + "=" + p[n][k]);
+            root.hyprRun(args);
+        }
     }
 
     // ------------------------------------------- цифровая интенсивность
     // Считает и применяет отдельный скрипт: там же лежит сам шейдер и знание
-    // о том, как разговаривать с компоновщиком. Здесь только запоминаем.
-    Process { id: pVibrance }
+    // о том, как разговаривать с компоновщиком. The shader setting is then
+    // saved in looknfeel.lua (decoration.screen_shader) so it survives reloads;
+    // at 50 % (neutral) the line is removed again.
+    Process {
+        id: pVibrance
+        onExited: {
+            var shader = Quickshell.env("HOME") + "/.config/hypr/shaders/vibrance.frag";
+            root.hyprRun(root.cfg.vibrance === 50
+                ? ["unset", "looknfeel", "decoration.screen_shader"]
+                : ["set", "looknfeel", "decoration.screen_shader", "\"" + shader + "\""]);
+        }
+    }
 
     // Ползунок шлёт значение на каждое движение мыши, а каждый вызов — это
     // пересборка шейдера и перечитывание его компоновщиком. Без сдерживания
@@ -427,7 +406,7 @@ PanelWindow {
     // остановилась.
     Timer {
         id: vibranceFlush
-        interval: 160
+        interval: 300
         onTriggered: {
             pVibrance.command = ["sh", "-c",
                 root.scriptDir + "/vibrance.sh set "
@@ -442,31 +421,6 @@ PanelWindow {
         root.cfg.vibrance = Math.max(0, Math.min(100, Math.round(pct)));
         vibranceFlush.restart();
     }
-
-    // ----------------------------------------------------------- мышь
-    // Через hyprctl eval по той же причине, что и настройки мониторов:
-    // keyword не-legacy парсер молча отвергает, выходя с нулевым кодом.
-    Process { id: pInput; property string args: ""; command: ["sh", "-c", pInput.args] }
-    function applyInput() {
-        var lua = "hl.config({ input = { sensitivity = "
-                + Number(root.cfg.mouseSens).toFixed(3)
-                + ", accel_profile = \"" + (root.cfg.mouseRaw ? "flat" : "adaptive") + "\""
-                + " } })";
-        var legacy = "hyprctl keyword input:sensitivity "
-                   + Number(root.cfg.mouseSens).toFixed(3)
-                   + "; hyprctl keyword input:accel_profile "
-                   + (root.cfg.mouseRaw ? "flat" : "adaptive");
-        pInput.args = "out=$(hyprctl eval '" + lua + "' 2>&1); "
-                    + "case \"$out\" in ok*) ;; *) " + legacy + " ;; esac";
-        pInput.running = false;
-        pInput.running = true;
-        root.saveCfg();
-    }
-
-    // Настройки ввода и цвета живут в компоновщике, а он их не помнит: любой
-    // hyprctl reload — и всё вернулось к тому, что записано в конфиге. Своё
-    // накатываем заново вместе с настройками мониторов, одним таймером —
-    // см. monReplayTimer, он же срабатывает и на старте оболочки.
 
     // ------------------------------------------------- проводная сеть
     // Кабель воткнут — значок сети должен быть проводной, а не Wi-Fi: связь
@@ -535,92 +489,8 @@ PanelWindow {
     readonly property bool isEn: cfg.lang === "en"
     function tr(k) { return isEn && i18n.en[k] !== undefined ? i18n.en[k] : k; }
 
-    // -------------------------------------------------- язык экрана входа
-    // Greeter работает от пользователя sddm и наши настройки прочитать не
-    // может: ~/ закрыт. Дублируем выбранный язык в общий каталог тем же
-    // QML-фрагментом, что и акцент темы, — иначе экран входа продолжал бы
-    // говорить по-русски после переключения системы на английский.
-    // Каталог заводит установщик; если его нет, молча ничего не делаем.
-    Process {
-        id: pGreeterLocale
-        command: ["sh", "-c",
-            "d=/var/lib/panacea; [ -w \"$d\" ] || exit 0; " +
-            "printf 'import QtQuick 2.15\\nQtObject { property string lang: \"%s\" }\\n' " +
-            "\"$1\" > \"$d/locale.qml\" && chmod 644 \"$d/locale.qml\"",
-            "_", root.cfg.lang]
-    }
-    // Палитра для экрана входа — тем же способом и в тот же каталог.
-    //
-    // Раньше её писал hypr/scripts/palette.sh из $accent_color, а это
-    // палитра терминалов и редакторов, к теме оболочки отношения не имеющая.
-    // Совпадение было случайным: на чёрно-белой теме экран входа встречал
-    // терракотовым кружком аватара и таким же кружком загрузки.
-    //
-    // Пишем не один акцент, а всю четвёрку: у Nothing своя не только
-    // выделяющая краска, но и текст с фоном.
-    Process {
-        id: pGreeterTheme
-        command: ["sh", "-c",
-            "d=/var/lib/panacea; [ -w \"$d\" ] || exit 0; " +
-            "printf 'import QtQuick 2.15\\nQtObject {\\n" +
-            "  property color value: \"%s\"\\n" +
-            "  property color fg: \"%s\"\\n" +
-            "  property color muted: \"%s\"\\n" +
-            "  property color bg: \"%s\"\\n}\\n' " +
-            "\"$1\" \"$2\" \"$3\" \"$4\" > \"$d/accent.qml\" " +
-            "&& chmod 644 \"$d/accent.qml\"",
-            "_",
-            String(root.colOn), String(root.colFg),
-            String(root.colMuted), String(root.colBg)]
-    }
-    // Прозрачность терминала — правилом компоновщика, а не alpha в foot.ini.
-    //
-    // Сам foot читает свой конфиг только при запуске: ползунок не менял бы
-    // ничего в уже открытых окнах, а именно там его и двигают, глядя на
-    // терминал. Правило Hyprland применяется сразу и ко всем окнам разом.
-    //
-    // Пишем и применяем: файл нужен, чтобы значение пережило перезагрузку —
-    // windowrules.lua подхватывает его при старте, — а eval, чтобы увидеть
-    // результат сейчас, не дожидаясь следующего входа в систему.
-    Process {
-        id: pTermAlpha
-        command: ["sh", "-c",
-            "d=\"$HOME/.config/hypr/lua\"; mkdir -p \"$d\" || exit 0; " +
-            "printf 'return { opacity = %s }\\n' \"$1\" > \"$d/term_data.lua\"; " +
-            "hyprctl eval \"hl.window_rule({ name = 'panacea-term-opacity', " +
-            "match = { class = '^(footclient|foot)$' }, opacity = $1 })\" >/dev/null 2>&1",
-            "_", root.cfg.termAlpha.toFixed(2)]
-    }
-    // Сдерживаем, как и запись яркости по шине: ползунок шлёт значение на
-    // каждое движение мыши, а каждое — это запуск hyprctl. Наперегонки они
-    // спорят за один и тот же вызов, и компоновщик показывает баннер с
-    // ошибкой. Пишем, когда рука остановилась.
-    Timer {
-        id: termAlphaFlush
-        interval: 180
-        onTriggered: {
-            pTermAlpha.running = false;
-            pTermAlpha.running = true;
-        }
-    }
-    function applyTermAlpha() { termAlphaFlush.restart(); }
 
-    // Перезапуск сервера терминала.
-    //
-    // Нужен там, где правило компоновщика бессильно: своя alpha у foot,
-    // цвета, шрифт — всё это сервер читает один раз при старте и раздаёт
-    // клиентам. Просто убить его нельзя: автозапуск отрабатывает один раз за
-    // сеанс и заново не поднимет, а без сервера терминал перестанет
-    // открываться вовсе. Поэтому убиваем и тут же поднимаем сами.
-    //
-    // Открытые окна при этом закроются — они и есть клиенты умершего
-    // сервера. Об этом сказано на кнопке.
-    Process {
-        id: pTermRestart
-        command: ["sh", "-c",
-            "pkill -x foot >/dev/null 2>&1; sleep 0.4; " +
-            "setsid -f foot --server >/dev/null 2>&1"]
-    }
+
     // Запуск команды, переживающей закрытие панели.
     //
     // Process, объявленный внутри страницы, умирает вместе с ней: меню
@@ -655,44 +525,7 @@ PanelWindow {
         }
     }
 
-    function restartTerminalServer() {
-        pTermRestart.running = false;
-        pTermRestart.running = true;
-    }
 
-    // Фон терминала под тему.
-    //
-    // На Nothing он совпадает с карточками виджетов — тем же тёмно-серым,
-    // чтобы терминал читался частью набора, а не чужим окном. На остальных
-    // темах файл пустой, и цвет остаётся тот, что задаёт общая палитра: она
-    // правится руками и о темах оболочки не знает.
-    //
-    // Пишем в свой файл, а не в тот, что генерирует palette.sh: у одного
-    // файла не бывает двух хозяев без спора. foot.ini подключает оба, наш
-    // вторым — побеждает подключённый позже.
-    readonly property string termBg: "171717"
-    Process {
-        id: pTermTheme
-        command: ["sh", "-c",
-            "f=\"$HOME/.config/foot/panacea-theme\"; mkdir -p \"$(dirname \"$f\")\" || exit 0; " +
-            "if [ -n \"$1\" ]; then " +
-            "printf '[colors-dark]\\nbackground=%s\\n' \"$1\" > \"$f\"; " +
-            "else : > \"$f\"; fi",
-            "_", root.themeNothing ? root.termBg : ""]
-    }
-    function syncTermTheme() {
-        pTermTheme.running = false;
-        pTermTheme.running = true;
-    }
-
-    function syncGreeterTheme() {
-        pGreeterTheme.running = false;
-        pGreeterTheme.running = true;
-    }
-    onThemeChanged: {
-        root.syncGreeterTheme();
-        root.syncTermTheme();
-    }
 
     // ------------------------------------------------------------ язык
     // Язык оболочки меняется мгновенно — это её собственный словарь. Язык
@@ -739,10 +572,6 @@ PanelWindow {
         pLocaleSet.running = true;
     }
 
-    function syncGreeterLocale() {
-        pGreeterLocale.running = false;
-        pGreeterLocale.running = true;
-    }
     // Один обработчик на сигнал: QML второго не допускает, поэтому всё, что
     // должно случиться на смене языка, собрано здесь.
     //
@@ -751,7 +580,6 @@ PanelWindow {
     // переключает сразу, а это одно осталось бы на прежнем языке до
     // следующего опроса, то есть до четверти часа.
     onIsEnChanged: {
-        root.syncGreeterLocale();
         if (root.cfg.featWidgets || root.cfg.weatherOnIsland) root.refreshWeather();
     }
 
@@ -835,277 +663,13 @@ PanelWindow {
         pBootOs.running = true;
     }
 
-    // Номер версии оболочки: его правит автор при выпуске, а хеш коммита
-    // рядом говорит, из какого состояния репозитория собрана сборка.
-    readonly property string version: "1.0.12"
-
-    // ------------------------------------------------------------ обновление
-    // Установленную версию помечает установщик (~/.config/panacea/.version),
-    // а update.sh сверяет её с концом ветки на GitHub. Хеш коммита меняется от
-    // любой правки — и от новых файлов, и от изменений в старых, и от удалений,
-    // поэтому одного сравнения хватает, чтобы поймать всё сразу.
-    property string updStatus: ""      // "" | current | behind | unknown | offline
-    property string updSubject: ""     // заголовок последнего коммита
-    property string updLatest: ""      // хеш на GitHub
-    property string updCurrent: ""     // хеш, с которого ставили
-    property bool   updBusy: false
-    property string updStep: ""
-    property string updError: ""      // код ошибки от update.sh, не текст
-    // о какой версии уже сообщали: одно уведомление на выпуск, а не на проверку
-    property string updNotified: ""
-
-    readonly property bool updateAvailable: updStatus === "behind"
-
-    // update.sh печатает код, а не фразу: иначе текст ошибки приходил бы на
-    // языке скрипта и не слушался выбранного языка интерфейса.
-    readonly property string updErrorText: {
-        switch (root.updError) {
-        case "":         return "";
-        case "nogit":    return root.tr("Не установлен git");
-        case "offline":  return root.tr("Нет связи с GitHub");
-        case "download": return root.tr("Не удалось скачать обновление");
-        case "install":  return root.tr("Установщик завершился с ошибкой");
-        // PANACEA-LOCAL: see applyUpdate()
-        case "local":    return "Self-update is off here: it would overwrite Omarchy's Hyprland config and the local patches. Update by hand.";
-        default:         return root.tr("Обновление не удалось");
-        }
-    }
-
-    // Идёт ли сейчас проверка. Отдельно от updBusy: обновление длится минуты и
-    // показывается в острове, а проверка — секунду-другую и живёт только в
-    // окне настроек. Без этого флага нажатие на «Проверить» не отвечало ничем:
-    // ответ приходил, когда человек уже решил, что кнопка сломана, — и если
-    // версия оказывалась прежней, не менялось вообще ничего.
-    property bool updChecking: false
-
-    function checkUpdate() {
-        // Omarchy port: this is a fork, there is no upstream to update from.
-        return;
-        if (root.updBusy || root.updChecking) return;
-        root.updChecking = true;
-        root.updError = "";
-        pUpdCheck.running = false;
-        pUpdCheck.running = true;
-    }
-
-    function applyUpdate() {
-        if (root.updBusy) return;
-        // PANACEA-LOCAL: never self-update on Omarchy. update.sh runs upstream's
-        // install.sh, which replaces ~/.config/{hypr,fish,foot,fastfetch,nano}
-        // (Omarchy's hyprland.lua, autostart.lua, monitors.lua) and drops every
-        // local patch. Update by hand: fetch upstream, re-run
-        // apply-local-patches.sh, test, then ~/dev/panacea-omarchy/sync.sh.
-        root.updError = "local";
-        return;
-        root.updBusy = true;
-        root.updError = "";
-        root.updStep = "download";
-        root.updCreepAt = 0;
-        // Обновление идёт минуты и переживает закрытие настроек: показываем
-        // его в острове, иначе о нём знало бы только открытое окно.
-        root.beginBusy(root.tr("Обновление…"), "󰚰", root.updStepPercent);
-        pUpdApply.running = true;
-    }
-
-    // Проценты у обновления считаются по этапам, которые печатает update.sh:
-    // байтов и файлов оно не считает, а этапы известны наперёд.
-    //
-    // Веса, а не равные доли. Этапы длятся по-разному: скачивание идёт
-    // секунды, а сохранение настроек и отметка версии — доли секунды. При
-    // равных долях полоса замирала на первой седьмой, а потом за миг
-    // проскакивала остальные шесть — то есть скакала вместо того, чтобы
-    // заполняться. Числа взяты из замеров: клон около трёх секунд,
-    // установщик около одной, остальное — мгновения.
-    readonly property var updSteps: [
-        { id: "download",   w: 30 },
-        { id: "selfupdate", w: 2  },
-        { id: "backup",     w: 3  },
-        { id: "install",    w: 12 },
-        { id: "greeter",    w: 2  },
-        { id: "restore",    w: 3  },
-        { id: "restart",    w: 2  },
-        { id: "done",       w: 0  }
-    ]
-    readonly property real updWeightTotal: {
-        var t = 0;
-        for (var i = 0; i < root.updSteps.length; i++) t += root.updSteps[i].w;
-        return t > 0 ? t : 1;
-    }
-    function updStepIndex(id) {
-        for (var i = 0; i < root.updSteps.length; i++)
-            if (root.updSteps[i].id === id) return i;
-        return -1;
-    }
-    // Доля начатого этапа — то, что накоплено до него. Внутри самого этапа
-    // полосу двигает updCreep: сколько именно прошло, скрипт не знает.
-    readonly property int updStepPercent: {
-        var i = root.updStepIndex(root.updStep);
-        if (i < 0) return 0;
-        var acc = 0;
-        for (var k = 0; k < i; k++) acc += root.updSteps[k].w;
-        return Math.round(acc * 100 / root.updWeightTotal);
-    }
-    // Сколько отдать текущему этапу целиком: до этой границы его и подползаем.
-    readonly property int updStepCeil: {
-        var i = root.updStepIndex(root.updStep);
-        if (i < 0) return 0;
-        var acc = 0;
-        for (var k = 0; k <= i; k++) acc += root.updSteps[k].w;
-        return Math.round(acc * 100 / root.updWeightTotal);
-    }
-
-    // Полоса ползёт и внутри этапа, не дожидаясь следующего.
-    //
-    // Самый долгий шаг — скачивание, и его длительность зависит от связи:
-    // ни git, ни установщик о ходе работы не сообщают. Стоящая полоса на
-    // медленной сети читается как зависшее обновление. Поэтому она движется
-    // сама, замедляясь у границы этапа и никогда её не переступая: дойти до
-    // конца раньше настоящего конца было бы обманом.
-    // Своя дробная доля, а не busyProgress: тот целый, и приращение меньше
-    // единицы в нём терялось бы — полоса застревала бы у самой границы, куда
-    // подползает всё медленнее.
-    property real updCreepAt: 0
-
-    Timer {
-        id: updCreep
-        interval: 220
-        repeat: true
-        running: root.updBusy && root.updStep !== "done"
-        onTriggered: {
-            var to = root.updStepCeil;
-            if (root.updCreepAt >= to) return;
-            // шаг тем меньше, чем ближе граница
-            var left = to - root.updCreepAt;
-            root.updCreepAt = Math.min(to, root.updCreepAt + Math.max(0.25, left * 0.06));
-            root.busyProgress = Math.round(root.updCreepAt);
-        }
-    }
-    onUpdStepChanged: {
-        if (!root.updBusy) return;
-        // Назад полоса не ходит: этап мог начаться раньше, чем подполз
-        // предыдущий, и откат читался бы как сбой.
-        if (root.updStepPercent > root.updCreepAt)
-            root.updCreepAt = root.updStepPercent;
-        if (root.updStep === "done") root.updCreepAt = 100;
-        root.busyProgress = Math.round(root.updCreepAt);
-    }
-
-    function updParse(text, done) {
-        var lines = String(text).trim().split("\n");
-        for (var i = 0; i < lines.length; i++) {
-            var kv = lines[i].split("=");
-            if (kv.length < 2) continue;
-            var k = kv[0].trim(), v = lines[i].slice(kv[0].length + 1).trim();
-            if (k === "status")       root.updStatus = v;
-            else if (k === "subject") root.updSubject = v;
-            else if (k === "latest")  root.updLatest = v;
-            else if (k === "current") root.updCurrent = v;
-            else if (k === "step")    root.updStep = v;
-            else if (k === "error")   root.updError = v;
-            else if (k === "missing")  root.missingDeps = v;
-            else if (k === "obsolete") root.obsoleteDeps = v;
-            else if (k === "version") root.updCurrent = v;
-        }
-        if (!done) return;
-        // Уведомление показываем один раз на версию: проверка идёт по таймеру,
-        // и каждые шесть часов напоминать об одном и том же — навязчиво.
-        if (root.updStatus === "behind" && root.updLatest !== root.updNotified) {
-            root.updNotified = root.updLatest;
-            pUpdNotify.running = true;
-        }
-    }
-
-    Process {
-        id: pUpdCheck
-        command: [root.scriptDir + "/update.sh", "check"]
-        stdout: StdioCollector { onStreamFinished: root.updParse(text, true) }
-        // Снимаем флаг по выходу процесса, а не по концу вывода: скрипт может
-        // упасть, ничего не напечатав, и тогда крутилка осталась бы навсегда.
-        onExited: root.updChecking = false
-    }
-
-    Process {
-        id: pUpdApply
-        command: [root.scriptDir + "/update.sh", "apply"]
-        // Построчно, а не StdioCollector.
-        //
-        // StdioCollector копит весь вывод и отдаёт его одним куском, когда
-        // поток закроется, то есть когда обновление уже кончилось. Строки
-        // step= приезжали все разом и в самом конце — полоса честно стояла на
-        // нуле всё обновление, а потом оболочка просто перезапускалась. Ход
-        // работы, показанный после её окончания, — это не ход работы.
-        //
-        // SplitParser отдаёт каждую строку сразу, как скрипт её напечатал.
-        stdout: SplitParser {
-            splitMarker: "\n"
-            onRead: data => root.updParse(data, false)
-        }
-        onExited: code => {
-            root.updBusy = false;
-            root.endBusy();
-            if (code !== 0 && root.updError.length === 0)
-                root.updError = "failed";
-            if (code === 0) { root.updStatus = "current"; root.updStep = "done"; }
-        }
-    }
-
-    // Обычное уведомление рабочего стола: его увидят, даже когда окно настроек
-    // закрыто, а поймает его собственная служба уведомлений оболочки.
-    // -p заставляет notify-send напечатать номер уведомления. Он нужен,
-    // чтобы потом узнать своё же уведомление в общей ленте: сравнивать текст
-    // нельзя — он переводится, и на другом языке проверка молча перестала бы
-    // совпадать.
-    property int updNotifId: -1
-    Process {
-        id: pUpdNotify
-        command: ["notify-send", "-p", "-a", "Panacea", "-i",
-                  root.pluginDir + "/assets/logo-128.png",
-                  root.tr("Доступно обновление Panacea"), root.updSubject]
-        stdout: StdioCollector {
-            onStreamFinished: root.updNotifId = parseInt(String(text).trim()) || -1
-        }
-    }
-
-    // ----------------------------------------------------- «что нового»
-    // update.sh кладёт список изменений в .whatsnew. Оболочка после
-    // перезапуска показывает его один раз и файл стирает.
-    property var whatsNew: []
-    readonly property bool whatsNewOpen: whatsNew.length > 0
-
-    FileView {
-        id: whatsNewFile
-        path: Quickshell.env("HOME") + "/.config/panacea/.whatsnew"
-        watchChanges: true
-        // Файла почти всегда нет, и это не ошибка: он появляется только
-        // после обновления. Без этого лог засорялся при каждом запуске.
-        printErrors: false
-        onFileChanged: reload()
-        onLoaded: {
-            var t = String(whatsNewFile.text()).trim();
-            root.whatsNew = t.length ? t.split("\n").filter(x => x.trim().length) : [];
-        }
-        onLoadFailed: root.whatsNew = []
-    }
-
-    // Слежение цепляется к существующему файлу, а .whatsnew появляется уже
-    // после запуска оболочки, если обновлялись без перезапуска. Поэтому
-    // первые полминуты перечитываем сами.
-    Timer {
-        interval: 3000
-        running: root.whatsNew.length === 0
-        repeat: true
-        triggeredOnStart: true
-        property int tries: 0
-        onTriggered: {
-            whatsNewFile.reload();
-            if (++tries > 10) running = false;
-        }
-    }
-
-    // Пакеты, которых не хватает после обновления. Ставим не мы: обновление
-    // идёт с --no-deps, а хватать пакеты через sudo из-под кнопки в настройках
-    // — не то, чего от него ждут. Поэтому просто называем их на том же экране.
-    property string missingDeps: ""
+    // ------------------------------------------------------------ version
+    // This fork has no upstream to update from. It is updated through its own
+    // git repo (~/.config/omarchy/plugins/isaqdn.panacea), so the upstream
+    // update check, self-updater and "what's new" screen are gone; the version
+    // is the one in manifest.json.
+    readonly property string version: host.manifest && host.manifest.version
+                                      ? String(host.manifest.version) : ""
 
     // Простое копирование в буфер. Пароли идут своим путём — им нужен
     // --sensitive-data и очистка по таймеру, см. vaultCopy().
@@ -1115,47 +679,6 @@ PanelWindow {
         pCopyText.command = ["sh", "-c", "printf '%s' \"$1\" | wl-copy", "_", String(t)];
         pCopyText.running = true;
     }
-
-    FileView {
-        id: missingDepsFile
-        path: Quickshell.env("HOME") + "/.config/panacea/.missingdeps"
-        watchChanges: true
-        printErrors: false
-        onFileChanged: reload()
-        onLoaded: root.missingDeps = String(missingDepsFile.text()).trim()
-        onLoadFailed: root.missingDeps = ""
-    }
-
-    // Обратная сторона: что оболочка ставила раньше и больше не использует.
-    // Удалять сами не будем — это пакеты в системе человека, а не наши.
-    property string obsoleteDeps: ""
-    FileView {
-        id: obsoleteDepsFile
-        path: Quickshell.env("HOME") + "/.config/panacea/.obsoletedeps"
-        watchChanges: true
-        printErrors: false
-        onFileChanged: reload()
-        onLoaded: root.obsoleteDeps = String(obsoleteDepsFile.text()).trim()
-        onLoadFailed: root.obsoleteDeps = ""
-    }
-
-    function dismissWhatsNew() {
-        root.whatsNew = [];
-        root.missingDeps = "";
-        root.obsoleteDeps = "";
-        pWhatsNewClear.running = true;
-    }
-    Process {
-        id: pWhatsNewClear
-        command: ["sh", "-c",
-                  "rm -f \"$1/.whatsnew\" \"$1/.missingdeps\" \"$1/.obsoletedeps\"", "_",
-                  Quickshell.env("HOME") + "/.config/panacea"]
-    }
-
-    // Первая проверка не на старте: при входе в систему сеть ещё поднимается,
-    // и запрос почти наверняка не прошёл бы.
-    Timer { interval: 45000; running: true; onTriggered: root.checkUpdate() }
-    Timer { interval: 6 * 3600 * 1000; running: true; repeat: true; onTriggered: root.checkUpdate() }
 
     // Code (scripts, assets, sounds) ships inside the plugin directory; state
     // (settings.json, .vibrance, caches) stays in ~/.config/panacea. It must:
@@ -1178,50 +701,6 @@ PanelWindow {
     function openSettingsAt(sectionId) {
         root.settingsSection = sectionId;
         if (root.page !== "settings" || !root.expanded) root.togglePage("settings");
-    }
-
-    // Пересобрать binds_data.lua и перечитать конфиг Hyprland
-    Process { id: pGenBinds }
-    // Скрипт читает settings.json, а запись файла асинхронная: если запускать
-    // его сразу после saveCfg(), он успевал прочитать ещё старое сочетание —
-    // и «Применить» не меняло ничего. Ждём сигнала о завершении записи.
-    property bool bindsPending: false
-    function applyBinds() {
-        root.bindsPending = true;
-        saveCfg();
-        bindsFallback.restart();
-    }
-    function runGenBinds() {
-        if (!root.bindsPending) return;
-        root.bindsPending = false;
-        bindsFallback.stop();
-        pGenBinds.command = ["sh", "-c",
-            root.scriptDir + "/genbinds.sh"];
-        pGenBinds.running = true;
-    }
-    // страховка, если сигнала о записи почему-то не будет
-    Timer { id: bindsFallback; interval: 700; onTriggered: root.runGenBinds() }
-
-    // Сочетания живут в settings.json, но Hyprland читает только производный
-    // от него binds_data.lua. Файл лежит внутри ~/.config/hypr, который
-    // установщик заменяет целиком, — и пропадал вместе с ним. Настройки при
-    // этом оставались на месте, поэтому со стороны это выглядело так, будто
-    // сочетания «не сохраняются»: окно Super+/ показывает своё, а нажатия
-    // работают заводские. Собираем файл заново, если его нет.
-    // Omarchy port: off. Omarchy's hyprland.lua never loads binds_data.lua, so
-    // the file is always missing and this ran genbinds.sh -- which ends in
-    // `hyprctl reload` -- on every start. Inside omarchy-shell the rail is
-    // rebuilt on each plugin reload, so that would reload Hyprland each time.
-    Process {
-        id: pBindsHeal
-        running: false
-        command: ["sh", "-c",
-            "[ -f \"$HOME/.config/hypr/lua/binds_data.lua\" ] "
-            + "|| \"" + root.scriptDir + "/genbinds.sh\""]
-    }
-    Connections {
-        target: cfgFile
-        function onSaved() { root.runGenBinds(); }
     }
 
     // ---------------------------------------------------------------- палитра
@@ -1482,9 +961,10 @@ PanelWindow {
                 || n === "closewindow" || n === "openwindow" || n === "workspace"
                 || n === "focusedmon")
                 fsProbe.restart();
-            // перезагрузка конфига Hyprland стирает всё, что мы наприменяли
+            // A config reload may change what the settings pages show (a hand
+            // edit, `omarchy refresh`, another tool), so re-read it.
             if (n === "configreloaded") {
-                monReplayTimer.restart();
+                root.refreshHyprLive();
                 // PANACEA-LOCAL: стекло переключают и клавишами, мимо панели.
                 // Свой тумблер тоже перезагружает конфиг, так что сюда мы
                 // попадаем в любом случае — перечитать состояние здесь дешевле,
@@ -1493,32 +973,11 @@ PanelWindow {
             }
         }
     }
-    // Перезагрузка конфига стирает не только настройки мониторов: скорость
-    // указателя, разгон и шейдер насыщенности живут там же и уезжают вместе
-    // с ними. Накатываем всё своё одним заходом, иначе после любого
-    // hyprctl reload мышь и цвет молча возвращались к заводским.
-    Timer {
-        id: monReplayTimer
-        interval: 400
-        onTriggered: {
-            root.monReplay();
-            root.applyInput();
-            pVibrance.command = ["sh", "-c",
-                root.scriptDir + "/vibrance.sh set "
-                + root.cfg.vibrance];
-            pVibrance.running = false;
-            pVibrance.running = true;
-        }
-    }
-
     // Один обработчик на сигнал: QML второго не допускает, поэтому всё, что
     // должно случиться при запуске, собрано здесь.
     Component.onCompleted: {
         fsProbe.restart();
-        syncGreeterLocale();
-        monReplayTimer.restart();
-        syncGreeterTheme();
-        syncTermTheme();
+        root.refreshHyprLive();
         root.cornersOn = root.cornersWanted;
         // Первое заполнение списка столов: дальше его ведёт onWsRawChanged, а
         // тот срабатывает только на изменение — стартовое значение он бы
@@ -1648,7 +1107,9 @@ PanelWindow {
         id: pLiveDir
         command: ["bash", Quickshell.env("HOME")
                           + "/.config/hypr/scripts/live_wallpaper.sh", "dir"]
-        running: true
+        // Omarchy port: Omarchy has no live (video) backgrounds and this
+        // script does not exist there; the Live tab is gone too.
+        running: false
         stdout: StdioCollector { onStreamFinished: root.liveDir = text.trim() }
     }
     Process {
@@ -1675,10 +1136,7 @@ PanelWindow {
             }
         }
     }
-    function refreshLiveWalls() {
-        pLiveList.running = false;
-        pLiveList.running = true;
-    }
+    function refreshLiveWalls() {}   // Omarchy port: see pLiveDir
     // папка живых обоев в проводнике: складывать видео надо именно туда
     function openLiveFolder() {
         if (root.liveDir.length === 0) return;
@@ -2011,16 +1469,14 @@ PanelWindow {
     property string themeFadeWall: ""
     property bool   themeFading: false
 
-    FileView {
-        id: curWallFile
-        path: Quickshell.env("HOME") + "/.config/hypr/wallpaper.conf"
-        blockLoading: true
-    }
-
+    // The background now showing is Omarchy's current background, which
+    // themes.sh list marks as active.
     function startThemeFade() {
-        var m = /^\$wallpaper\s*=\s*(.+)$/m.exec(curWallFile.text() || "");
-        if (!m) return;
-        root.themeFadeWall = "file://" + String(m[1]).trim();
+        var cur = "";
+        for (var i = 0; i < root.wallList.length; i++)
+            if (root.wallList[i].wActive) cur = root.wallList[i].wPath;
+        if (!cur.length) return;
+        root.themeFadeWall = "file://" + cur;
         root.themeFading = true;
     }
     function endThemeFade() { root.themeFading = false; }
@@ -2512,14 +1968,23 @@ PanelWindow {
         }
     }
 
+    // ---------------------------------------------------- Omarchy services
+    // As the active bar, Panacea gets live read-write proxies for Omarchy's
+    // idle, night light, notification and media services (the host's
+    // pluginFirstPartyServiceFor). Their state is Omarchy's own, so the same
+    // switch in Omarchy's menus, `omarchy toggle ...` and here always agree.
+    readonly property var omarchyIdle:  host.shell ? host.shell.firstPartyServiceFor("omarchy.idle") : null
+    readonly property var omarchyNight: host.shell ? host.shell.firstPartyServiceFor("omarchy.nightlight") : null
+    readonly property var omarchyNotif: host.shell ? host.shell.firstPartyServiceFor("omarchy.notifications") : null
+
     // ---------------------------------------------------------------- не спать
-    // Пока тумблер включён, systemd-inhibit держит блокировку: система не
-    // уснёт и не погасит экран. Quickshell сам убивает процесс при выключении.
-    property bool keepAwake: false
-    Process {
-        running: root.keepAwake
-        command: ["systemd-inhibit", "--what=idle:sleep:handle-lid-switch",
-                  "--who=Panacea", "--why=Keep awake", "sleep", "infinity"]
+    // Coffee mode is Omarchy's stay-awake (`omarchy toggle idle`). It used to
+    // be a systemd-inhibit lock, which Omarchy's idle timer never sees: it only
+    // honours Wayland idle inhibitors, so the screensaver and lock still came.
+    readonly property bool keepAwake: root.omarchyIdle ? root.omarchyIdle.stayAwake === true : false
+    function setKeepAwake(on) {
+        if (root.omarchyIdle) root.omarchyIdle.setIdleEnabled(!on);
+        else root.runDetached("omarchy-toggle-idle " + (on ? "stay-awake" : "allow-idle"));
     }
 
     // ---------------------------------------------------------- PANACEA-LOCAL
@@ -2613,8 +2078,13 @@ PanelWindow {
     // «Не беспокоить» — состояние, а не настройка: его переключает кнопка в
     // быстрых настройках, но живёт оно в файле, чтобы переживать перезапуск и
     // совпадать с тем, что показывает окно настроек.
-    property bool dnd: cfg.notifDnd
-    function toggleDnd() { cfg.notifDnd = !cfg.notifDnd; root.saveCfg(); }
+    // Omarchy's notification daemon owns Do Not Disturb; Panacea's own
+    // server is off (featNotifications), so its flag would silence nothing.
+    readonly property bool dnd: root.omarchyNotif ? root.omarchyNotif.doNotDisturb === true : false
+    function toggleDnd() {
+        if (root.omarchyNotif) root.omarchyNotif.setDoNotDisturb(!root.omarchyNotif.doNotDisturb);
+        else root.runDetached("omarchy-shell notifications toggleDnd");
+    }
     property var  notifCurrent: null         // то, что показывается сейчас
     ListModel { id: notifModel }             // история
     readonly property var notifications: notifModel
@@ -2688,16 +2158,6 @@ PanelWindow {
             // одно действие без имени — тоже почти всегда «открыть»
             if (!used && acts.length === 1) acts[0].invoke();
         }
-        // Своё уведомление об обновлении ведёт не в приложение, а в настройки:
-        // кнопка «Обновить» живёт там, и искать её после нажатия странно.
-        if (id >= 0 && id === root.updNotifId) {
-            root.updNotifId = -1;
-            root.dismissToast();
-            root.dropNotification(id);
-            root.openSettingsAt("system");
-            return;
-        }
-
         root.focusApp(hint);
         root.dismissToast();
         if (id >= 0) root.dropNotification(id);
@@ -3216,9 +2676,63 @@ PanelWindow {
     // ------------------------------------------------------------------ OSD
     // При изменении громкости или яркости пилюля на пару секунд превращается
     // в полоску уровня и возвращается обратно.
-    property string osdKind: ""          // "vol" | "mic" | "bright"
+    property string osdKind: ""          // "vol" | "mic" | "bright" | "gen" | "msg"
     property real   osdValue: 0          // 0..1
     property bool   osdMuted: false
+    property string osdGlyph: ""         // "gen" / "msg": icon from Omarchy's OSD payload
+    property string osdMessage: ""       // "msg": text instead of a level bar
+
+    // Omarchy's OSD calls (`omarchy-osd`, sent by its volume, brightness,
+    // keyboard-backlight and toggle scripts) land here: Panacea registers the
+    // `osd` IPC target that omarchy.osd normally owns, and omarchy.osd is
+    // disabled (disabledPlugins in shell.json), so there is one OSD, drawn in
+    // Panacea's style. Payload: { icon, message, value, max, progressText, duration }.
+    function omarchyOsdGlyph(name) {
+        // Same names and glyphs as Omarchy's osd/OsdModel.js iconFor().
+        var n = String(name || "").toLowerCase();
+        var map = {
+            "keyboard": 0xF030C, "touchpad": 0xF07F8, "touch": 0xF0741, "touchscreen": 0xF0741,
+            "reboot": 0xF0709, "restart": 0xF0709, "shutdown": 0xF0425, "power": 0xF0425,
+            "poweroff": 0xF0425, "logout": 0xF0343, "sign-out": 0xF0343, "leave": 0xF0343,
+            "media": 0xF075A, "player": 0xF075A, "media-source": 0xF075A, "player-source": 0xF075A,
+            "media-play": 0xF040A, "player-play": 0xF040A, "media-pause": 0xF03E4,
+            "player-pause": 0xF03E4, "media-next": 0xF04AD, "player-next": 0xF04AD,
+            "media-previous": 0xF04AE, "player-previous": 0xF04AE
+        };
+        if (map[n] !== undefined) return String.fromCodePoint(map[n]);
+        return n.length ? String(name) : "";
+    }
+    function showOmarchyOsd(payloadJson) {
+        if (!cfg.featOsd) return;
+        var p;
+        try { p = JSON.parse(payloadJson || "{}"); } catch (e) { return; }
+        var icon = String(p.icon || "").toLowerCase();
+        var message = String(p.message || "");
+        var max = Math.max(1, parseInt(p.max || "100", 10) || 100);
+        var raw = p.value === undefined || p.value === "" ? NaN : parseInt(p.value, 10);
+        var level = isNaN(raw) ? -1 : Math.max(0, Math.min(1, raw / max));
+        var muted = /mute|off/.test(icon);
+        var duration = parseInt(p.duration === undefined ? "1200" : p.duration, 10);
+        var hold = isNaN(duration) || duration <= 0 ? 1700 : Math.max(900, duration + 500);
+        if (message.length === 0 && level >= 0) {
+            if (icon.indexOf("volume") === 0 || icon === "mute" || icon === "muted") { showOsd("vol", level, muted, hold); return; }
+            if (icon.indexOf("mic") === 0) { showOsd("mic", level, muted, hold); return; }
+            if (icon === "brightness" || icon === "display") { showOsd("bright", level, false, hold); return; }
+            osdGlyph = omarchyOsdGlyph(p.icon);
+            showOsd("gen", level, false, hold);
+            return;
+        }
+        osdGlyph = omarchyOsdGlyph(p.icon);
+        osdMessage = message.length ? message : String(p.progressText || "");
+        showOsd("msg", 0, false, hold);
+    }
+    IpcHandler {
+        target: "osd"
+        function show(payloadJson: string): string { root.showOmarchyOsd(payloadJson); return "ok"; }
+        function close(): string { root.osdKind = ""; return "ok"; }
+        function state(): string { return root.osdKind.length ? "open" : "closed"; }
+        function ping(): string { return "ok"; }
+    }
     readonly property bool osdActive: osdKind.length > 0 && !expanded
 
     Timer {
@@ -3226,15 +2740,18 @@ PanelWindow {
         interval: 1700
         onTriggered: root.osdKind = ""
     }
-    function showOsd(kind, value, muted) {
+    // holdMs: how long it stays (Omarchy's payloads say); 1700 ms otherwise.
+    function showOsd(kind, value, muted, holdMs) {
         if (!cfg.featOsd) return;
         osdKind = kind;
         osdValue = Math.max(0, Math.min(1, value));
         osdMuted = muted === true;
+        osdTimer.interval = holdMs > 0 ? holdMs : 1700;
         osdTimer.restart();
     }
 
     readonly property string osdIcon: {
+        if (osdKind === "gen" || osdKind === "msg") return osdGlyph;
         if (osdKind === "bright") return String.fromCodePoint(0xF00DE);       // солнце
         if (osdKind === "mic")
             return String.fromCodePoint(osdMuted ? 0xF036D : 0xF036C);        // микрофон
@@ -4005,6 +3522,8 @@ PanelWindow {
         // открыть окно настроек сразу на нужном разделе: удобно вешать на
         // сочетание клавиш и незаменимо при проверке самих настроек
         function settingsAt(tab: string): void {
+            // A section id ("display", "input", "windows", "lock"...) or a number.
+            if (!/^\d+$/.test(tab)) { root.openSettingsAt(tab); return; }
             root.settingsTab = parseInt(tab) || 0;
             if (root.page !== "settings" || !root.expanded) root.togglePage("settings");
         }
@@ -4014,13 +3533,12 @@ PanelWindow {
         function weather(): void { root.openWeatherDetails(); }
         function smartClose(): string {
             if (!root.cfg.closePanaceaFirst) return "disabled";
-            var anyOpen = root.expanded || root.overviewOpen || root.wallsOpen || root.keysWindowOpen || root.whatsNewOpen || root.weatherDetailsOpen;
+            var anyOpen = root.expanded || root.overviewOpen || root.wallsOpen || root.keysWindowOpen || root.weatherDetailsOpen;
             if (anyOpen) {
                 if (root.weatherDetailsOpen) root.weatherDetailsOpen = false;
                 else if (root.overviewOpen) root.closeOverview();
                 else if (root.wallsOpen) root.closeWalls();
                 else if (root.keysWindowOpen) root.closeKeysWindow();
-                else if (root.whatsNewOpen) root.dismissWhatsNew();
                 else if (root.expanded) root.collapse();
                 return "closed_overlay";
             }
@@ -5313,7 +4831,19 @@ PanelWindow {
                 Behavior on color { ColorAnimation { duration: 160 } }
             }
 
+            // "msg" (an Omarchy OSD message, e.g. "Touchpad disabled"): text
+            // in place of the level bar and the percentage.
+            Text {
+                visible: root.osdKind === "msg"
+                Layout.maximumWidth: 260
+                text: root.osdMessage
+                color: root.colFg
+                elide: Text.ElideRight
+                font { family: root.fontFam; pixelSize: root.fontSize - 1; bold: true }
+            }
+
             Rectangle {
+                visible: root.osdKind !== "msg"
                 Layout.preferredWidth: 150
                 Layout.preferredHeight: 5
                 Layout.alignment: Qt.AlignVCenter
@@ -5333,6 +4863,7 @@ PanelWindow {
             }
 
             Text {
+                visible: root.osdKind !== "msg"
                 Layout.preferredWidth: mBatt.width
                 horizontalAlignment: Text.AlignRight
                 text: root.osdMuted ? "—" : Math.round(root.osdValue * 100) + "%"
@@ -6959,28 +6490,6 @@ LazyLoader {
         }
     }
 }
-
-// Экран «что нового» после обновления. Отдельным слоем поверх всего: его
-// показывают один раз, и он должен перехватывать клавиатуру.
-PanelWindow {
-    visible: root.whatsNewOpen
-    anchors { top: true; bottom: true; left: true; right: true }
-    screen: root.screen
-    color: "transparent"
-    WlrLayershell.layer: WlrLayer.Overlay
-    WlrLayershell.keyboardFocus: root.whatsNewOpen ? WlrKeyboardFocus.Exclusive
-                                                   : WlrKeyboardFocus.None
-
-    Loader {
-        anchors.fill: parent
-        active: root.whatsNewOpen
-        sourceComponent: WhatsNewView {
-            sys: root
-            lines: root.whatsNew
-        }
-    }
-}
-
 
 // Проводник отдельным окном. Живёт на уровне ShellRoot, а не внутри
 // пилюли: окно не может быть ребёнком другого окна.
