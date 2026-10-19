@@ -709,11 +709,11 @@ PanelWindow {
     // а текст и акцент берутся из настроек, поэтому вручную выбранные цвета
     // никуда не деваются.
     //
-    // "omarchy" (the default) follows the active Omarchy theme, live: bar
-    // background and text, accent and urgent come from omarchy-shell's Color
-    // singleton (qs.Commons), which `omarchy theme set` updates over IPC; green
-    // and yellow (ok / warn) come from the theme's colors.toml. Omarchy's
-    // "nothing" theme also turns on Panacea's Nothing look.
+    // "omarchy" (the default) follows the active Omarchy theme, live: text,
+    // accent and urgent come from omarchy-shell's Color singleton (qs.Commons),
+    // which `omarchy theme set` updates over IPC; the background matches the
+    // terminals, and green and yellow (ok / warn) come from the theme's
+    // colors.toml. Omarchy's "nothing" theme also turns on Panacea's Nothing look.
     property string omarchyThemeName: ""
     property var omarchyPalette: ({})      // colors.toml key -> "#rrggbb"
     FileView {
@@ -747,7 +747,11 @@ PanelWindow {
     readonly property var omarchyTheme: ({
         id: "omarchy",
         name: "Omarchy" + (root.omarchyThemeName.length ? " · " + root.omarchyThemeName : ""),
-        bg: String(Color.bar.background),
+        // Same surface as the terminals: Omarchy's kitty/ghostty templates use
+        // `gradient_start terminal_background background`, so the theme's
+        // terminal_background when it has one, else its background.
+        bg: root.omarchyPalette.terminal_background || root.omarchyPalette.background
+            || String(Color.bar.background),
         fg: String(Color.bar.text),
         on: String(Color.accent),
         ok: root.omarchyPalette.green || root.omarchyPalette.color2 || String(Color.accent),
