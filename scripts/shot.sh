@@ -24,7 +24,6 @@
 
 set -u
 
-CFG="$HOME/.config/panacea"
 DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
 SHOT=""
 FROZEN=0

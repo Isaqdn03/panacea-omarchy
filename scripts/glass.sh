@@ -63,7 +63,7 @@ FLAT_TERM_ALPHA=1
 # терминала.
 write_glass_conf() {
     mkdir -p "$(dirname "$1")" 2>/dev/null || return 0
-    printf '# Пишет ~/.config/panacea/scripts/glass.sh — правки затрутся.\n%s\n' \
+    printf '# Пишет ~/.config/omarchy/plugins/isaqdn.panacea/scripts/glass.sh — правки затрутся.\n%s\n' \
            "$2" >"$1"
 }
 
@@ -75,7 +75,7 @@ write_term() {
 glass_off() {
     mkdir -p "$STATE_DIR" || return 1
     cat >"$FLAG" <<'LUA'
--- Стекло выключено. Файл пишет ~/.config/panacea/scripts/glass.sh — удалите
+-- Стекло выключено. Файл пишет ~/.config/omarchy/plugins/isaqdn.panacea/scripts/glass.sh — удалите
 -- его (или нажмите тумблер ещё раз), и вернётся то, что задано в looknfeel.lua.
 --
 -- Гасим размытие целиком, а не по слоям: у слоёв правило blur только
