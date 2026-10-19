@@ -10,16 +10,17 @@ Built and used on Omarchy 4.0.4 with Hyprland 0.56 (Lua config) and Quickshell 0
 ## Install
 
 ```bash
-git clone -b omarchy-plugin https://github.com/Isaqdn03/panacea-omarchy.git \
-  ~/.config/omarchy/plugins/isaqdn.panacea
-omarchy-shell shell rescanPlugins
-omarchy bar use isaqdn.panacea
+# Clones into ~/.config/omarchy/plugins/isaqdn.panacea and makes it the bar.
+omarchy plugin add https://github.com/Isaqdn03/panacea-omarchy.git --enable
 
 # Panacea draws the OSD and the notifications; turn off Omarchy's copies.
 omarchy-shell shell setPluginEnabled omarchy.osd false
 omarchy-shell shell setPluginEnabled omarchy.notifications false
 omarchy restart shell
 ```
+
+Update with `omarchy plugin update isaqdn.panacea`. It shows the diff, then
+fast-forwards the checkout.
 
 To go back to Omarchy's bar, run `omarchy bar use omarchy.bar`, re-enable the two
 plugins with `... setPluginEnabled <id> true`, then `omarchy restart shell`.
