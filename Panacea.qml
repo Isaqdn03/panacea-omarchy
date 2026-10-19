@@ -1559,8 +1559,18 @@ PanelWindow {
     // как сети и устройства. Отдельное окно посреди экрана для выбора обоев
     // было слишком тяжёлым жестом.
     readonly property bool settingsMode:
-        expanded && (page === "settings"
-                     || page === "files" || page === "media")
+        expanded && modalPage && !railMode
+
+    // On the rail these pages do not morph the rail into a centred card: that
+    // animated its position, size and corners on different curves while the
+    // page's content slid along unclipped, and closing squeezed the content
+    // into the drawer's width. They open as a modal of their own instead
+    // (modalCard): it fades and scales in over a dimmed screen and fades back
+    // out with its layout intact, and the rail stays where it is. modalMode
+    // holds until the page resets after the fade-out (pageResetTimer).
+    readonly property bool modalPage: page === "settings" || page === "files" || page === "media"
+    readonly property bool modalMode: railMode && modalPage
+    readonly property bool modalShown: modalMode && expanded
 
     // Вкладка «Клавиши» раскладывается в две колонки, поэтому окно шире:
     // вертикальный список не влезал и уезжал за нижнюю кромку экрана.
@@ -3946,7 +3956,8 @@ PanelWindow {
     //   directly above DP-1, so the pointer crosses this edge on every trip
     //   between monitors, and an instant reveal flashed the pill each time.
     readonly property bool pillHidden: root.cfg.pillAutoHide
-                                       && !root.expanded && !root.holdOpen
+                                       && (!root.expanded || root.modalMode)
+                                       && (!root.holdOpen || root.modalMode)
                                        && !root.osdActive && !root.pillDragging
                                        && !root.toastActive && !root.voxActive
                                        && !root.btToastActive && !root.acToastActive
@@ -4014,7 +4025,8 @@ PanelWindow {
     WlrLayershell.keyboardFocus: root.holdOpen ? WlrKeyboardFocus.Exclusive
                                               : WlrKeyboardFocus.None
 
-    readonly property var activePanel: (root.cfg.pillKeepVisible && root.expanded && !root.settingsMode) ? detachedPanel : capsule
+    readonly property var activePanel: root.modalShown ? modalCard
+        : (root.cfg.pillKeepVisible && root.expanded && !root.settingsMode) ? detachedPanel : capsule
 
     // Клик мимо закреплённой панели — закрыть.
     // Области лежат строго ВОКРУГ активной панели, поэтому клики по элементам
@@ -4188,7 +4200,7 @@ PanelWindow {
                 ? toastCapsule.implicitHeight + 24 : root.pillH
 
         width: root.settingsMode ? root.settingsW
-             : (root.expanded && !root.cfg.pillKeepVisible) ? root.panelW
+             : (root.expanded && !root.cfg.pillKeepVisible && !root.modalMode) ? root.panelW
              : root.railTab      ? idleLen       // PANACEA-LOCAL: rail's transient tab
              : root.railMode     ? root.railW    // PANACEA-LOCAL: the rail itself
              : root.pillSide     ? idleThick
@@ -6262,21 +6274,22 @@ PanelWindow {
         RailView {
             sys: root
             anchors.fill: parent
-            visible: root.railFull && !root.expanded && capsule.width < root.railW + 4
+            visible: root.railFull && (!root.expanded || root.modalMode) && capsule.width < root.railW + 4
         }
 
         // --------------------------------------------------- раскрытая панель
         Loader {
             id: contentLoader
             z: 10
-            parent: (root.cfg.pillKeepVisible && root.expanded && !root.settingsMode) ? detachedPanel : capsule
+            parent: root.modalMode ? modalCard
+                  : (root.cfg.pillKeepVisible && root.expanded && !root.settingsMode) ? detachedPanel : capsule
             anchors.top: parent ? parent.top : undefined
             anchors.topMargin: 15
             anchors.horizontalCenter: parent ? parent.horizontalCenter : undefined
             // Ширина берётся у ЦЕЛЕВОЙ панели, а не у анимируемой капсулы:
             // иначе содержимое переливалось по ширине на каждом кадре
             // сворачивания и выглядело как размазанная краска.
-            width: (root.settingsMode ? root.settingsW : root.panelW) - 30
+            width: ((root.settingsMode || root.modalMode) ? root.settingsW : root.panelW) - 30
             // Пока показывается карточка выбора экрана (или тост), контент
             // раскрытой панели не рисуем: при старте записи из quick settings
             // панель сворачивается, а её содержимое иначе видно ещё пару кадров
@@ -6285,7 +6298,8 @@ PanelWindow {
             active: (root.expanded
                      || (root.railMode ? (!root.railTab && capsule.width > root.railW + 4)
                                        : capsule.height > root.pillH + 4)
-                     || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005))
+                     || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005)
+                     || (root.modalMode && modalCard.opacity > 0.005))
                     && !root.recPickActive && !root.btToastActive
                     && !root.acToastActive && !root.voxActive
             visible: !root.recPickActive && !root.btToastActive && !root.acToastActive && !root.voxActive
@@ -6300,8 +6314,10 @@ PanelWindow {
             // сетей или устройств Escape должен уводить к плиткам, а не
             // захлопывать панель целиком.
             Keys.onEscapePressed: root.escapeFromPage()
-            opacity: root.expanded ? 1 : 0
+            // in the modal the card itself fades; its content stays put
+            opacity: (root.expanded || root.modalMode) ? 1 : 0
             Behavior on opacity {
+                enabled: !root.modalMode
                 NumberAnimation { duration: root.expanded ? root.animFast : 90; easing.type: Easing.OutCubic }
             }
 
@@ -6339,6 +6355,64 @@ PanelWindow {
         Component { id: vaultSaveComp; VaultSaveView { sys: root } }
         Component { id: agentsComp;    AgentsView { sys: root } }
         Component { id: githubComp;    GithubView { sys: root } }   // PANACEA-LOCAL
+    }
+
+    // ----------------------------------------------------------- modal
+    // See modalMode. The scrim dims the screen a little so the card reads as
+    // in front: its colour is the terminals' colour, and without it the card
+    // would melt into a terminal behind. Clicks outside the card still reach
+    // the outside-click areas (activePanel), which close it.
+    Rectangle {
+        id: modalScrim
+        anchors.fill: parent
+        z: 54
+        color: Qt.rgba(0, 0, 0, 0.30)
+        opacity: root.modalShown ? 1 : 0
+        visible: opacity > 0.005
+        Behavior on opacity {
+            OpacityAnimator { duration: root.modalShown ? root.animFast : Math.round(root.animFast * 0.8); easing.type: Easing.OutCubic }
+        }
+    }
+
+    Rectangle {
+        id: modalCard
+        z: 56
+        readonly property bool showMe: root.modalShown
+        anchors.centerIn: parent
+        width: root.settingsW
+        // capsule.contentH is the page's settled height (see applyContentH)
+        height: Math.min(capsule.contentH, root.height - 48)
+        radius: root.cfg.islandRadius > 0 && !root.cfg.notchMode ? root.cfg.islandRadius : 26
+        color: root.colBg
+        border.width: 1
+        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.08)
+        clip: true
+        visible: opacity > 0.005
+        opacity: showMe ? 1 : 0
+        scale: showMe ? 1 : 0.965
+        // In: ease out, a touch longer. Out: quicker, so closing feels prompt.
+        // Animators run on the render thread: building the page blocks the UI
+        // thread for a moment as the card opens, and a NumberAnimation (time
+        // based, ticked on that thread) came out of the stall already mostly
+        // done, so the card popped in instead of fading.
+        Behavior on opacity {
+            OpacityAnimator {
+                duration: modalCard.showMe ? root.animFast + 40 : Math.round(root.animFast * 0.8)
+                easing.type: Easing.OutCubic
+            }
+        }
+        Behavior on scale {
+            ScaleAnimator {
+                duration: modalCard.showMe ? root.animMs : Math.round(root.animFast * 0.8)
+                easing.type: modalCard.showMe ? Easing.OutCubic : Easing.InCubic
+            }
+        }
+        // Section changes resize it smoothly; the first layout after opening
+        // snaps instead of growing out of a placeholder height.
+        Behavior on height {
+            enabled: modalCard.opacity > 0.98
+            NumberAnimation { duration: root.animMs; easing.type: Easing.InOutCubic }
+        }
     }
 
     // ------------------------------------------------ отдельная плавающая панель
