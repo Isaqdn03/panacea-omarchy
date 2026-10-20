@@ -5635,38 +5635,25 @@ PanelWindow {
             // трогает (одна точка растекается, другая сжимается на столько
             // же); меняет её только появление или закрытие стола, а это
             // событие редкое и заметное по делу.
-            // Обе группы получают ширину по большей из них: без этого часы
-            // считались бы центром пустого места, а не острова.
-            readonly property real arm:
-                Math.max(nLeft.implicitWidth, nRight.implicitWidth)
-            implicitWidth: nClock.implicitWidth + 2 * (nothingCapsule.arm + nothingCapsule.armGap)
+            // PANACEA-LOCAL: each side keeps its own width, so the pill hugs its
+            // content and the clock sits between the two groups rather than at
+            // the pill's exact centre. Both sides used to reserve the wider
+            // one's width (arm) to keep the clock centred; the narrower right
+            // side then spread Wi-Fi, volume and battery across the padding.
+            implicitWidth: nClock.implicitWidth + nLeft.implicitWidth + nRight.implicitWidth
+                           + 2 * nothingCapsule.armGap
 
             // ------------------------------------------- слева: столы
             RowLayout {
                 id: nLeft
-                // PANACEA-LOCAL: привязка к ЧАСАМ, а не к кромке капсулы.
-                // Плечи резервируют ширину по большей из них (arm выше), и весь
-                // излишек узкого плеча собирался в один просвет у часов: справа
-                // он выходил втрое шире левого. Прижав обе группы к часам
-                // одинаковым зазором, мы делаем эти два просвета равными по
-                // построению, а неровность уезжает на внешний край — там её
-                // съедает скругление капсулы.
+                // PANACEA-LOCAL: привязка к ЧАСАМ, а не к кромке капсулы: оба
+                // просвета у часов равны armGap по построению.
                 anchors.right: nClock.left
                 anchors.rightMargin: nothingCapsule.armGap
                 anchors.verticalCenter: parent.verticalCenter
-                // PANACEA-LOCAL: плечо занимает ровно arm, а не свою ширину.
-                //
-                // arm — ширина БОЛЬШЕГО из плеч, и её резервируют оба, иначе
-                // часы стояли бы по центру пустоты. Разницу узкое плечо
-                // раньше отдавало целиком наружу: точки столов прижимались к
-                // разделителю, а слева копилось поле вдвое шире правого.
-                // Теперь излишек забирает ячейка столов (Layout.fillWidth
-                // ниже) и точки встают по её центру — поля по краям острова
-                // выходят равными, а просветы у часов не трогаются.
-                //
-                // implicitWidth от явной ширины не зависит, поэтому arm через
-                // неё не считается заново и цикла в привязке нет.
-                width: nothingCapsule.arm
+                // PANACEA-LOCAL: своя ширина, см. implicitWidth острова выше.
+                // implicitWidth от явной ширины не зависит, цикла нет.
+                width: implicitWidth
                 // PANACEA-LOCAL: было 8. Просветы внутри пары «значок и его
                 // число» остались прежними (5-6), а этот — между соседними
                 // показаниями. Границу между группами держит линия, поэтому
@@ -5703,9 +5690,8 @@ PanelWindow {
                 // открытии четвёртого стола весь остров переставлялся. Пока
                 // столов не больше пяти, теперь не меняется ничего.
                 Item {
-                    // PANACEA-LOCAL: ячейка столов забирает весь излишек
-                    // узкого плеча, а точки стоят по её центру. Минимум — по
-                    // содержимому, чтобы ячейка не сжалась уже точек.
+                    // PANACEA-LOCAL: точки стоят по центру ячейки. Минимум —
+                    // по содержимому, чтобы ячейка не сжалась уже точек.
                     Layout.fillWidth: true
                     Layout.minimumWidth: wsRow.implicitWidth
                     Layout.preferredWidth: wsRow.implicitWidth
@@ -5875,7 +5861,11 @@ PanelWindow {
             // --------------------------------------------- центр: часы
             DotText {
                 id: nClock
-                anchors.centerIn: parent
+                // PANACEA-LOCAL: the content block is centred in the pill and the
+                // clock sits right after the left group
+                anchors.verticalCenter: parent.verticalCenter
+                x: Math.round((parent.width - nothingCapsule.implicitWidth) / 2
+                              + nLeft.implicitWidth + nothingCapsule.armGap)
                 // PANACEA-LOCAL: только цифры, см. clockDigits.
                 value: nothingCapsule.clockDigits
                 size: root.dotHClock
@@ -5913,7 +5903,7 @@ PanelWindow {
                 // стоит — центрировать в правом плече нечего, — поэтому
                 // излишек, если правое станет узким, ляжет за последним
                 // элементом, к внешней кромке.
-                width: nothingCapsule.arm
+                width: implicitWidth   // PANACEA-LOCAL: своя ширина
                 // PANACEA-LOCAL: было 16 — просветом добирали ширину, чтобы
                 // группы читались раздельно. Теперь их разводят линии, и
                 // просвет тот же, что слева.
