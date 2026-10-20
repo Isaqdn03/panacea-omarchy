@@ -734,7 +734,7 @@ QtObject {
         // --------------------------------------------- Floating overlay & Power
         "Режим оверлея (Floating)": "Floating overlay mode",
         "Остров парит поверх окон без резервирования верхней строки: окна приложений не сжимаются и не прыгают при открытии или скрытии.":
-            "The island floats above windows without reserving top bar space: tiled windows do not resize or bounce when the island expands or auto-hides.",
+            "The island or rail floats above windows without reserving space at its edge: tiled windows do not resize or bounce when it expands or auto-hides. Off, windows are pushed clear of it.",
         "Закрывать окна Panacea по Super+Q": "Close Panacea windows on Super+Q",
         "Питание": "Power",
 

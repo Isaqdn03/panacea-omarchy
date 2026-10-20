@@ -3926,8 +3926,11 @@ PanelWindow {
     // его задаёт Hyprland (general:gaps_out). Пока мы прибавляли ещё и gap,
     // они складывались, и сверху выходило 11 px против 6 по остальным
     // кромкам. 0 — в режиме оверлея и когда остров скрыт.
+    // PANACEA-LOCAL: on the rail the strip is the rail's width, not pillH,
+    // or windows tuck under its right side. railMode rather than railFull, so
+    // the strip holds still while the rail turns into a tab for an OSD.
     exclusiveZone: (root.cfg.pillOverlay || root.pillHidden || (root.fullscreenActive && !root.expanded))
-                   ? 0 : pillH
+                   ? 0 : (root.railMode ? root.railW : pillH)
     WlrLayershell.layer: WlrLayer.Overlay
     // Пока поверх экрана развёрнутое окно, пилюли не видно совсем.
     // Показываем её обратно, если панель раскрыли клавишами или если
