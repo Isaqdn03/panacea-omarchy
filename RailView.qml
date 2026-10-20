@@ -235,6 +235,42 @@ Item {
             }
         }
 
+        // battery: same colours as the pill's; click opens the battery page
+        Item {
+            id: battItem
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: rail.sys.batteryPresent
+            width: battCol.implicitWidth
+            height: battCol.implicitHeight
+
+            readonly property color tint: rail.sys.batteryCharging || rail.sys.acOnline ? rail.sys.colOk
+                                        : rail.sys.batteryPct <= 15 ? rail.sys.colCrit : rail.sys.colMuted
+
+            Column {
+                id: battCol
+                spacing: 2
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: rail.sys.batteryIcon
+                    color: battItem.tint
+                    font { family: rail.sys.fontFam; pixelSize: rail.sys.fontSize - 1 }
+                    Behavior on color { ColorAnimation { duration: 200 } }
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: rail.sys.batteryPct + "%"
+                    color: rail.sys.batteryPct <= 15 && !rail.sys.acOnline ? rail.sys.colCrit : rail.sys.colFg
+                    font { family: rail.sys.fontFam; pixelSize: rail.sys.fontSize - 5; bold: true }
+                }
+            }
+            MouseArea {
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: rail.sys.openSub("battery")
+            }
+        }
+
         // network: cable or Wi-Fi; click opens the drawer's tiles
         Item {
             anchors.horizontalCenter: parent.horizontalCenter
