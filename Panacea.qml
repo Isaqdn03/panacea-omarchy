@@ -856,14 +856,24 @@ PanelWindow {
     // у боковых положений капсула стоит по центру высоты, а не у кромки экрана
     readonly property bool pillSide: pillAtLeft || pillAtRight
     // PANACEA-LOCAL: left edge = full-height rail + full-height drawer
-    // (RailView.qml). railTab: a transient card shows as a small mid-height
-    // tab instead. railFull: rail/drawer geometry is in effect.
+    // (RailView.qml). railFull: rail/drawer geometry is in effect.
     readonly property bool railMode: pillAtLeft
     readonly property int  railW: 38
-    readonly property bool railTab: railMode && !expanded
-                                    && (osdActive || toastActive || btToastActive
-                                        || acToastActive || recPickActive || voxActive)
-    readonly property bool railFull: railMode && !railTab && !settingsMode
+    readonly property bool railFull: railMode && !settingsMode
+    // PANACEA-LOCAL: on the rail, transient cards do not squeeze into the
+    // rail. A level OSD (volume, mic, brightness) draws vertically in the
+    // rail itself (RailView); notifications, Bluetooth, charger, recorder
+    // picker, dictation and text OSDs show in railCard, top right.
+    readonly property bool railCardActive: railMode && !expanded
+                                    && (toastActive || btToastActive || acToastActive
+                                        || recPickActive || voxActive
+                                        || (osdActive && osdKind === "msg"))
+    // What has to be on the pill or rail itself right now. On the rail a
+    // card lives in railCard, so it does not keep the rail out under
+    // auto-hide or stop it from opening.
+    readonly property bool cardOnPill: !railMode && (toastActive || btToastActive || acToastActive
+                                                     || recPickActive || voxActive)
+    readonly property bool osdOnPill: osdActive && !(railMode && osdKind === "msg")
 
     // PANACEA-LOCAL: Settings > Bar & Island > Layout. Rail is pillPos "left",
     // Pill is "top". The switch sits inside Settings, so close that first and
@@ -2484,7 +2494,7 @@ PanelWindow {
         id: toastTimer
         // если курсор на карточке — не убираем, ждём решения пользователя
         onTriggered: {
-            if (capsuleHover.hovered) { toastTimer.interval = 1200; restart(); return; }
+            if (root.railMode ? railCardHover.hovered : capsuleHover.hovered) { toastTimer.interval = 1200; restart(); return; }
             root.dismissToast();
         }
     }
@@ -3995,10 +4005,9 @@ PanelWindow {
     readonly property bool pillHidden: root.cfg.pillAutoHide
                                        && (!root.expanded || root.modalMode)
                                        && (!root.holdOpen || root.modalMode)
-                                       && !root.osdActive && !root.pillDragging
-                                       && !root.toastActive && !root.voxActive
-                                       && !root.btToastActive && !root.acToastActive
-                                       && !root.recActive && !root.recPickActive
+                                       && !root.osdOnPill && !root.pillDragging
+                                       && !root.cardOnPill
+                                       && !root.recActive
                                        && !root.pillPeek && !root.edgeReveal
                                        && !capsuleHover.hovered
     property bool pillPeek: false
@@ -4053,6 +4062,10 @@ PanelWindow {
         }
         Region {
             item: (root.cfg.pillKeepVisible && !root.settingsMode && (root.expanded || detachedPanel.opacity > 0.005)) ? detachedPanel : null
+            intersection: Intersection.Combine
+        }
+        Region {   // PANACEA-LOCAL: the rail's corner card
+            item: railCard.visible ? railCard : null
             intersection: Intersection.Combine
         }
     }
@@ -4238,7 +4251,6 @@ PanelWindow {
 
         width: root.settingsMode ? root.settingsW
              : (root.expanded && !root.cfg.pillKeepVisible && !root.modalMode) ? root.panelW
-             : root.railTab      ? idleLen       // PANACEA-LOCAL: rail's transient tab
              : root.railMode     ? root.railW    // PANACEA-LOCAL: the rail itself
              : root.pillSide     ? idleThick
                                  : idleLen
@@ -4286,7 +4298,6 @@ PanelWindow {
         // их высоту ограничивает уже своя прокрутка, а не остров.
         readonly property real targetH: root.settingsMode ? Math.min(contentH, root.height - 48)
                 : root.railFull ? root.height           // PANACEA-LOCAL: edge to edge
-                : root.railTab  ? idleThick             // PANACEA-LOCAL
                 : (root.expanded && !root.cfg.pillKeepVisible) ? Math.min(contentH, root.cfg.expandedH)
                 : root.pillSide ? idleLen
                                 : idleThick
@@ -4502,7 +4513,8 @@ PanelWindow {
                 if (!root.hoverExpandArmed) return;
                 // пока висит уведомление, наведение не раскрывает панель:
                 // иначе до крестика не добраться
-                if (root.toastActive || root.btToastActive || root.acToastActive || root.recPickActive || root.voxActive) return;
+                // PANACEA-LOCAL: on the rail those cards sit in railCard, out of the way
+                if (root.cardOnPill) return;
                 // При автопрятании наведением остров только показывают. Он и
                 // выезжает-то из-за кромки под этот самый курсор, так что
                 // раскрытие следом означало бы: хотел посмотреть время —
@@ -4532,8 +4544,8 @@ PanelWindow {
         MouseArea {
             anchors.fill: parent
             z: 0
-            enabled: !root.expanded && !root.toastActive && !root.pillDragging
-                     && !root.osdActive && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+            enabled: !root.expanded && !root.pillDragging && !root.cardOnPill   // PANACEA-LOCAL
+                     && !(root.osdActive && !root.railMode)
             cursorShape: Qt.PointingHandCursor
             onClicked: capsule.openPanel()
         }
@@ -4557,6 +4569,7 @@ PanelWindow {
         // z поверх всего содержимого капсулы: пока висит карточка, ни одна
         // область под ней не должна перехватывать щелчок.
         MouseArea {
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             anchors.fill: parent
             z: 100
             enabled: root.toastActive
@@ -4569,6 +4582,7 @@ PanelWindow {
         // ------------------------------------------ свёрнутое: уведомление
         RowLayout {
             id: toastCapsule
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             // Выше области нажатия карточки: сама она щелчки не перехватывает
             // (это просто текст и иконки), зато крестик внутри остаётся
             // доступным — иначе его накрыло бы прозрачной областью.
@@ -4677,6 +4691,7 @@ PanelWindow {
         // по центру статус (Подключено / Отключено) и имя, справа кольцо с зарядом.
         RowLayout {
             id: btCapsule
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             z: 110
             anchors.centerIn: parent
             spacing: 11
@@ -4851,6 +4866,7 @@ PanelWindow {
         // экране.
         Canvas {
             id: acWave
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             anchors.fill: parent
             z: 1
             visible: root.acToastActive
@@ -4917,6 +4933,7 @@ PanelWindow {
         // пилюли, без кольца.
         RowLayout {
             id: acCapsule
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             z: 110
             anchors.centerIn: parent
             spacing: 8
@@ -4951,6 +4968,7 @@ PanelWindow {
         // интерактивная, клики должны доходить до чипов.
         RowLayout {
             id: recPickCapsule
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             z: 130
             anchors.centerIn: parent
             spacing: 9
@@ -5018,6 +5036,7 @@ PanelWindow {
         // после отпускания, пока voxtype печатает текст, — «Расшифровываю…».
         RowLayout {
             id: voxCapsule
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             z: 120
             anchors.centerIn: parent
             spacing: 10
@@ -5065,10 +5084,12 @@ PanelWindow {
         // ------------------------------------------- свёрнутое: уровень (OSD)
         RowLayout {
             id: osdCapsule
+            parent: root.railMode ? railCard : capsule   // PANACEA-LOCAL
             anchors.centerIn: parent
             height: root.pillH
             spacing: 12
             visible: root.osdActive && !root.toastActive && !root.btToastActive && !root.acToastActive && !root.recPickActive && !root.voxActive
+                     && !(root.railMode && root.osdKind !== "msg")   // PANACEA-LOCAL: RailView draws it
             opacity: visible ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: root.animFast } }
 
@@ -6333,7 +6354,7 @@ PanelWindow {
             // позади карточки — экраны «проблёскивали».
             // PANACEA-LOCAL: on the rail, key off width; it is always tall
             active: (root.expanded
-                     || (root.railMode ? (!root.railTab && capsule.width > root.railW + 4)
+                     || (root.railMode ? capsule.width > root.railW + 4
                                        : capsule.height > root.pillH + 4)
                      || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005)
                      || (root.modalMode && modalCard.opacity > 0.005))
@@ -6409,6 +6430,35 @@ PanelWindow {
         Behavior on opacity {
             OpacityAnimator { duration: root.modalShown ? root.animFast : Math.round(root.animFast * 0.8); easing.type: Easing.OutCubic }
         }
+    }
+
+    // PANACEA-LOCAL: on the rail, notifications and the other transient cards
+    // show here, top right, instead of squeezing the rail into a mid-height
+    // tab. The cards are the capsule's own; on the rail they reparent here.
+    Rectangle {
+        id: railCard
+        z: 57
+        readonly property bool showMe: root.railCardActive
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.topMargin: 12
+        anchors.rightMargin: 12
+        width: capsule.idleLen
+        height: capsule.idleThick
+        radius: 18
+        color: root.colBg
+        border.width: 1
+        border.color: Qt.rgba(root.colFg.r, root.colFg.g, root.colFg.b, 0.10)
+        clip: true
+        visible: opacity > 0.005
+        opacity: showMe ? 1 : 0
+        scale: showMe ? 1 : 0.96
+        transformOrigin: Item.TopRight
+        Behavior on opacity { NumberAnimation { duration: root.animFast; easing.type: Easing.OutCubic } }
+        Behavior on scale { NumberAnimation { duration: root.animFast; easing.type: Easing.OutCubic } }
+        Behavior on height { NumberAnimation { duration: root.animFast; easing.type: Easing.OutCubic } }
+        // holds a notification on screen while the pointer is on it (toastTimer)
+        HoverHandler { id: railCardHover }
     }
 
     Rectangle {

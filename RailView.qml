@@ -15,9 +15,15 @@ Item {
     readonly property string rest: String(sys.timeText.split(":")[1] || "")
     readonly property string minutes: rest.replace(/[^0-9]/g, "")
     readonly property string ampm: rest.replace(/[^A-Za-z]/g, "")
+    // A level OSD (volume, mic, brightness) takes the rail's place while it
+    // is up; text OSDs and notifications go to root.railCard instead.
+    readonly property bool osdOn: sys.osdActive && sys.osdKind !== "msg"
 
     // ------------------------------------------------------------ workspaces
     Column {
+        opacity: rail.osdOn ? 0 : 1
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: 140 } }
         anchors.top: parent.top
         anchors.topMargin: 22
         anchors.horizontalCenter: parent.horizontalCenter
@@ -57,6 +63,9 @@ Item {
 
     // ----------------------------------------------------------------- clock
     Column {
+        opacity: rail.osdOn ? 0 : 1
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: 140 } }
         anchors.centerIn: parent
         spacing: 1
 
@@ -103,6 +112,9 @@ Item {
 
     // ---------------------------------------------------------------- status
     Column {
+        opacity: rail.osdOn ? 0 : 1
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: 140 } }
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 22
         anchors.horizontalCenter: parent.horizontalCenter
@@ -298,6 +310,45 @@ Item {
                 cursorShape: Qt.PointingHandCursor
                 onClicked: rail.sys.togglePage("main")
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ OSD
+    // vertical level for volume / mic / brightness, in place of the rail's
+    // contents while the OSD is up; same colours as the pill's level bar
+    Column {
+        anchors.centerIn: parent
+        spacing: 10
+        opacity: rail.osdOn ? 1 : 0
+        visible: opacity > 0.01
+        Behavior on opacity { NumberAnimation { duration: 140 } }
+
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: rail.sys.osdIcon
+            color: rail.sys.osdMuted ? rail.sys.colMuted : rail.sys.colFg
+            font { family: rail.sys.fontFam; pixelSize: rail.sys.iconSize }
+        }
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: 6
+            height: Math.round(rail.height * 0.34)
+            radius: 3
+            color: Qt.rgba(1, 1, 1, 0.16)
+            Rectangle {
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: parent.height * (rail.sys.osdMuted ? 0 : rail.sys.osdValue)
+                radius: 3
+                color: rail.sys.osdKind === "bright" ? rail.sys.colWarn : rail.sys.colOn
+                Behavior on height { NumberAnimation { duration: 90; easing.type: Easing.OutCubic } }
+            }
+        }
+        Text {
+            anchors.horizontalCenter: parent.horizontalCenter
+            text: rail.sys.osdMuted ? "—" : Math.round(rail.sys.osdValue * 100) + "%"
+            color: rail.sys.colMuted
+            font { family: rail.sys.fontFam; pixelSize: rail.sys.fontSize - 5; bold: true }
         }
     }
 }
