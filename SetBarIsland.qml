@@ -17,6 +17,19 @@ ColumnLayout {
     SetCard {
         sys: page.sys
 
+        // PANACEA-LOCAL: the full-height left rail, or the island at the top
+        // edge. Picking one closes Settings, then the bar changes shape.
+        SetSelect {
+            sys: page.sys
+            label: "Layout"
+            options: [
+                { id: "rail", text: "Rail" },
+                { id: "pill", text: "Pill" }
+            ]
+            value: page.sys.railMode ? "rail" : "pill"
+            onPicked: id => page.sys.setLayout(id)
+        }
+
         SetToggle {
             sys: page.sys
             label: page.sys.tr("Notch mode")

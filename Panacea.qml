@@ -852,6 +852,27 @@ PanelWindow {
                                         || acToastActive || recPickActive || voxActive)
     readonly property bool railFull: railMode && !railTab && !settingsMode
 
+    // PANACEA-LOCAL: Settings > Bar & Island > Layout. Rail is pillPos "left",
+    // Pill is "top". The switch sits inside Settings, so close that first and
+    // move only after the page has reset: flipping railMode while the modal
+    // fades out would hand its content back to the capsule mid-fade.
+    property string pendingPillPos: ""
+    function setLayout(id) {
+        if ((id === "rail") === railMode) return;
+        pendingPillPos = id === "rail" ? "left" : "top";
+        collapse();
+        layoutSwitchTimer.restart();
+    }
+    Timer {
+        id: layoutSwitchTimer
+        interval: root.animMs + 80
+        onTriggered: {
+            root.cfg.pillPos = root.pendingPillPos;
+            root.pendingPillPos = "";
+            root.saveCfg();
+        }
+    }
+
     // ------------------------------------------------- перенос острова мышью
     // Тумблер в настройках; тянут за полосу над часами в раскрытых быстрых
     // настройках. У кромки остров цепляется к её центру, в пустоте —

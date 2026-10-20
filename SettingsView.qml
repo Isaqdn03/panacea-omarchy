@@ -25,7 +25,7 @@ Item {
     readonly property var sections: [
         { id: "bar",     title: "Bar & Island",   g: 0xF12E1, page: "SetBarIsland.qml",
           sub: view.sys.tr("Как остров стоит на кромке и во что он разворачивается."),
-          keys: "notch island pill bar height width остров вырез капсула" },
+          keys: "notch island pill rail layout bar height width остров вырез капсула" },
         { id: "media",   title: "Media",          g: 0xF0387, page: "SetMedia.qml",
           sub: view.sys.tr("Плеер, обложки и то, что видно в свёрнутом острове."),
           keys: "player music cover звук плеер музыка обложка" },
