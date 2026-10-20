@@ -62,13 +62,21 @@ whenever a file under `~/.config/omarchy/plugins` is written.
 ## Working with Omarchy
 
 - **Theme:** the default "Omarchy" theme takes its colours live from the active
-  Omarchy theme. The background matches the terminals (`terminal_background`).
+  Omarchy theme. The background matches the terminals: the `background` in the
+  theme's `kitty.conf`, else `colors.toml`.
 - **IPC:** Panacea answers Omarchy's `osd` and `notifications` IPC targets, so
   `omarchy-osd`, the SUPER + , keys and notification silencing all keep working.
 - **Services:** Coffee mode is Omarchy's stay-awake, and lock is
   `omarchy-system-lock`. Night light is Omarchy's.
 - **Its own IPC:** `omarchy-shell pill <method>`, e.g. `peek`, `controls`,
   `settingsAt display`, `back`, `current`.
+- **Glass mode:** `scripts/glass.sh` (Control Center row, SUPER + SHIFT + T)
+  switches Hyprland's blur and the terminals' transparency together. Off writes
+  `panacea-glass.conf` next to each terminal's config, pinning its background
+  opacity to 1; on removes it, so the terminal's own opacity applies. Each
+  terminal has to include it below its own opacity line: `globinclude
+  panacea-glass.conf` in `kitty.conf` (with `dynamic_background_opacity yes`),
+  `config-file = ?"~/.config/ghostty/panacea-glass.conf"` in ghostty's `config`.
 
 ## Hacking
 
