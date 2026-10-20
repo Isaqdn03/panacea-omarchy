@@ -736,22 +736,35 @@ PanelWindow {
             root.omarchyPalette = out;
         }
     }
+    // The terminal's own background, read from the theme's kitty.conf (the
+    // default terminal). A theme may hand-write its terminal files instead of
+    // taking Omarchy's templates: Nothing's kitty/ghostty/alacritty/foot all
+    // say #1f1f1f while its colors.toml background is #0a0a0b.
+    property string omarchyTermBg: ""
+    FileView {
+        id: omarchyKittyFile
+        path: Quickshell.env("HOME") + "/.local/state/omarchy/current/theme/kitty.conf"
+        printErrors: false
+        onLoaded: {
+            var m = String(text()).match(/^\s*background\s+(#[0-9A-Fa-f]{6})\b/m);
+            root.omarchyTermBg = m ? m[1] : "";
+        }
+    }
     // The theme directory is replaced on a switch, so a file watch would go
-    // stale; Color changing is the reliable signal to read colors.toml again.
+    // stale; Color changing is the reliable signal to read the files again.
     Connections {
         target: Color
-        function onAccentChanged() { omarchyColorsFile.reload(); }
-        function onBackgroundChanged() { omarchyColorsFile.reload(); }
-        function onForegroundChanged() { omarchyColorsFile.reload(); }
+        function onAccentChanged() { omarchyColorsFile.reload(); omarchyKittyFile.reload(); }
+        function onBackgroundChanged() { omarchyColorsFile.reload(); omarchyKittyFile.reload(); }
+        function onForegroundChanged() { omarchyColorsFile.reload(); omarchyKittyFile.reload(); }
     }
     readonly property var omarchyTheme: ({
         id: "omarchy",
         name: "Omarchy" + (root.omarchyThemeName.length ? " · " + root.omarchyThemeName : ""),
-        // Same surface as the terminals: Omarchy's kitty/ghostty templates use
-        // `gradient_start terminal_background background`, so the theme's
-        // terminal_background when it has one, else its background.
-        bg: root.omarchyPalette.terminal_background || root.omarchyPalette.background
-            || String(Color.bar.background),
+        // Same surface as the terminals: the theme's kitty.conf background,
+        // else its colors.toml terminal_background or background.
+        bg: root.omarchyTermBg || root.omarchyPalette.terminal_background
+            || root.omarchyPalette.background || String(Color.bar.background),
         fg: String(Color.bar.text),
         on: String(Color.accent),
         ok: root.omarchyPalette.green || root.omarchyPalette.color2 || String(Color.accent),
