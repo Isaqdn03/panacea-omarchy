@@ -2204,6 +2204,14 @@ Item {
                 onAct: view.sys.togglePage("notif")
             }
 
+            // PANACEA-LOCAL: the layout island, out of the bar in this
+            // page's place (BarIsland.qml)
+            IconBtn {
+                glyph: String.fromCodePoint(0xF10AA)   // md-dock_left
+                tip: "Layout"
+                onAct: view.sys.toggleIsland("layout")
+            }
+
             IconBtn {
                 glyph: String.fromCodePoint(0xF0493)
                 tip: view.sys.tr("Настройки")

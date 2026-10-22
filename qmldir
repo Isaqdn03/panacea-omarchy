@@ -5,6 +5,7 @@ AgentsView 1.0 AgentsView.qml
 AudioView 1.0 AudioView.qml
 AuthView 1.0 AuthView.qml
 BackButton 1.0 BackButton.qml
+BarIsland 1.0 BarIsland.qml
 CalendarView 1.0 CalendarView.qml
 singleton CavaSource 1.0 CavaSource.qml
 ClipboardView 1.0 ClipboardView.qml
@@ -18,6 +19,7 @@ GithubView 1.0 GithubView.qml
 Glyph 1.0 Glyph.qml
 LanGlyph 1.0 LanGlyph.qml
 LauncherView 1.0 LauncherView.qml
+LayoutView 1.0 LayoutView.qml
 MaskedShot 1.0 MaskedShot.qml
 MediaView 1.0 MediaView.qml
 singleton MicCavaSource 1.0 MicCavaSource.qml

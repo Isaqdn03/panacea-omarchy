@@ -604,7 +604,7 @@ PanelWindow {
     // со стороны выглядело, будто две наклейки слетаются к острову с разных
     // сторон. Пока он едет, их просто нет, и приезжает он целым.
     readonly property bool cornersWanted:
-        !(root.settingsMode || root.wallsOpen || root.pillHidden)
+        !(root.settingsMode || root.wallsOpen || root.pillHidden || root.barAway)
     property bool cornersOn: false
     Timer {
         id: cornerReveal
@@ -924,6 +924,99 @@ PanelWindow {
         }
     }
 
+    // ------------------------------------------------- islands out of the bar
+    // PANACEA-LOCAL: surfaces of Panacea's own that grow out of the bar
+    // (BarIsland.qml): the layout island so far. island names the one that
+    // is out, "" for none.
+    property string island: ""
+    readonly property bool islandOut: island !== "" || layoutIsland.busy
+    // The open page the island takes the place of, as it opens ({rect, r}),
+    // and how long the rail takes to come out first when it was hidden.
+    property var islandFrom: null
+    property int islandRailMs: 0
+
+    function toggleIsland(name) {
+        if (root.island === name) { root.closeIsland(); return; }
+        var page = null;
+        if (root.expanded && !root.modalMode) {
+            var a = root.activePanel;
+            page = { rect: Qt.rect(a.x, a.y, a.width, a.height), r: root.railFull ? 0 : 26 };
+            // the page stays until the island covers it (dropDrawer); this
+            // folds it anyway if that never comes
+            drawerHandover.restart();
+        }
+        root.islandFrom = page;
+        root.islandRailMs = root.pillHidden ? capsule.slideMs : 0;
+        root.island = name;
+    }
+    function closeIsland() { root.island = ""; }
+
+    // Move the bar, taking the island along: it folds into the bar, the bar
+    // slides away off its edge (barAway), takes its new shape and edge out of
+    // sight, slides back in there, and the island comes back out of it.
+    property var pendingMove: null
+    property string movedIsland: ""
+    // The bar is gone off its edge for the move, whatever else holds it out.
+    property bool barAway: false
+    // The bar takes its new shape and edge at once, with no slide between the
+    // old place and the new.
+    property bool barJump: false
+    readonly property bool barMoving: root.pendingMove !== null || barMoveIn.running
+                                      || barMoveIsland.running
+
+    function moveBar(shape, edge) {
+        if (shape === root.barShape && edge === root.pillPos) return;
+        if (root.barMoving) return;
+        root.pendingMove = { shape: shape, edge: edge };
+        root.movedIsland = root.island;
+        if (root.island !== "") root.closeIsland();   // continues in islandFolded
+        else root.barMoveAway();
+    }
+    function islandFolded() {
+        if (root.pendingMove !== null && !root.barAway) root.barMoveAway();
+    }
+    function barMoveAway() {
+        root.barAway = true;
+        barMoveSwap.interval = capsule.slideMs + 30;
+        barMoveSwap.restart();
+    }
+    Timer {
+        id: barMoveSwap
+        onTriggered: {
+            var m = root.pendingMove;
+            root.barJump = true;
+            root.cfg.barShape = m.shape;
+            root.cfg.pillPos = m.edge;
+            root.barJump = false;
+            root.saveCfg();
+            root.pendingMove = null;
+            // one beat for the layer to take its new anchors, then back in
+            barMoveIn.restart();
+        }
+    }
+    Timer {
+        id: barMoveIn
+        interval: 60
+        onTriggered: {
+            root.barAway = false;
+            if (root.movedIsland === "") return;
+            // a rail lets the island out as it arrives; the pill is grown
+            // out of, so it has to be in place first
+            barMoveIsland.interval = root.railMode ? Math.round(capsule.slideMs * 0.6)
+                                                   : capsule.slideMs + 20;
+            barMoveIsland.restart();
+        }
+    }
+    Timer {
+        id: barMoveIsland
+        onTriggered: {
+            root.islandFrom = null;
+            root.islandRailMs = 0;
+            root.island = root.movedIsland;
+            root.movedIsland = "";
+        }
+    }
+
     // ------------------------------------------------- перенос острова мышью
     // Тумблер в настройках; тянут за полосу над часами в раскрытых быстрых
     // настройках. У кромки остров цепляется к её центру, в пустоте —
@@ -1003,6 +1096,9 @@ PanelWindow {
         morphTimer.restart();
         // панель закрылась — показываем карточки, накопившиеся за это время
         if (!expanded) toastPump.restart();
+        // PANACEA-LOCAL: a page opened some other way (a shortcut) takes
+        // over from an island
+        if (expanded && root.island !== "" && !drawerHandover.running) root.closeIsland();
     }
     onPageChanged:     { morphing = true; morphTimer.restart(); root.trackPage(); }
     // Держим дольше самой анимации: высота страницы приходит с задержкой
@@ -3865,6 +3961,14 @@ PanelWindow {
         // rail and the surface sliding back out of it.
         function holdFrom(who: string, screen: string): string { return root.holdRail(who, screen, true); }
         function dropDrawer(): void { root.dropDrawer(); }
+        // the layout island: the bar's shape, edge and auto-hide
+        function layout(): void { root.toggleIsland("layout"); }
+        // move the bar: shape rail|pill, edge top|bottom|left|right ("" keeps
+        // what it is); an open island goes along
+        function bar(shape: string, edge: string): void {
+            root.moveBar(shape === "rail" || shape === "pill" ? shape : root.barShape,
+                         ["top", "bottom", "left", "right"].indexOf(edge) >= 0 ? edge : root.pillPos);
+        }
         // The menu's call from before there were two holders.
         function hold(screen: string): string { return root.holdRail("menu", screen, false); }
         // индикатор голосового ввода: зовёт voxtype.sh на разных этапах
@@ -4139,6 +4243,7 @@ PanelWindow {
                                        && !root.pillPeek && !root.edgeReveal
                                        && !capsuleHover.hovered
                                        && !root.railHeld
+                                       && !root.islandOut && !root.barMoving
     property bool pillPeek: false
     // A companion's surface is out of the rail (`pill holdFor`): the rail
     // stays on screen until every one of them has folded back.
@@ -4257,11 +4362,11 @@ PanelWindow {
             intersection: Intersection.Combine
         }
     }
-    mask: root.holdOpen ? null : capsuleRegion
+    mask: (root.holdOpen || root.islandOut) ? null : capsuleRegion
     // Лаунчер забирает клавиатуру сразу (Exclusive), чтобы можно было
     // печатать без клика. OnDemand отдаёт фокус только после клика мышью.
-    WlrLayershell.keyboardFocus: root.holdOpen ? WlrKeyboardFocus.Exclusive
-                                              : WlrKeyboardFocus.None
+    WlrLayershell.keyboardFocus: (root.holdOpen || root.island !== "") ? WlrKeyboardFocus.Exclusive
+                                                                    : WlrKeyboardFocus.None
 
     readonly property var activePanel: root.modalShown ? modalCard
         : (root.keepBar && root.expanded && !root.settingsMode) ? detachedPanel : capsule
@@ -4337,9 +4442,10 @@ PanelWindow {
     // ------------------------------------------------------------- сама пилюля
     Rectangle {
         id: capsule
-        // PANACEA-LOCAL: above the sheet that hangs from a top or bottom
-        // rail, so the sheet tucks away behind the rail (detachedPanel)
-        z: root.railFlat ? 51 : 0
+        // PANACEA-LOCAL: above what comes out of the bar, so it tucks away
+        // behind the bar: the sheet of a top or bottom rail (detachedPanel)
+        // and the islands (BarIsland)
+        z: 51
 
         // Прижата к своей кромке и растёт от неё — поэтому «раскрытие к
         // центру» получается само, без отдельной анимации направления.
@@ -4359,11 +4465,11 @@ PanelWindow {
         // выносит его за границу окна, и на экране не остаётся ничего.
         readonly property real edgeMargin: root.settingsMode && !root.pillSide
                                            ? Math.max(24, (root.height - targetH) / 2)
-                                           : root.pillHidden ? -(targetH + 4) : freeGap
+                                           : (root.pillHidden || root.barAway) ? -(targetH + 4) : freeGap
         // у боковых положений от кромки отрывает уже горизонтальный отступ
         readonly property real sideMargin: root.settingsMode && root.pillSide
                                            ? Math.max(24, (root.width - width) / 2)
-                                           : root.pillHidden ? -(width + 4) : freeGap
+                                           : (root.pillHidden || root.barAway) ? -(width + 4) : freeGap
         anchors.topMargin:    root.pillAtTop    ? edgeMargin : 0
         anchors.bottomMargin: root.pillAtBottom ? edgeMargin : 0
         anchors.leftMargin:   root.pillAtLeft   ? sideMargin : 0
@@ -4373,15 +4479,19 @@ PanelWindow {
         readonly property int slideMs: root.railMode ? Math.round(root.animMs * 0.65) : root.animMs
         readonly property int slideEase: root.railMode ? Easing.OutCubic : Easing.InOutCubic
         Behavior on anchors.leftMargin {
+            enabled: !root.barJump
             NumberAnimation { duration: capsule.slideMs; easing.type: capsule.slideEase }
         }
         Behavior on anchors.rightMargin {
+            enabled: !root.barJump
             NumberAnimation { duration: capsule.slideMs; easing.type: capsule.slideEase }
         }
         Behavior on anchors.topMargin {
+            enabled: !root.barJump
             NumberAnimation { duration: capsule.slideMs; easing.type: capsule.slideEase }
         }
         Behavior on anchors.bottomMargin {
+            enabled: !root.barJump
             NumberAnimation { duration: capsule.slideMs; easing.type: capsule.slideEase }
         }
 
@@ -4563,7 +4673,7 @@ PanelWindow {
         // кривая обычная — движение просто останавливается.
         Behavior on width {
             // dropDrawer: a companion's surface covers the drawer; no fold
-            enabled: !root.drawerSnap
+            enabled: !root.drawerSnap && !root.barJump
             NumberAnimation {
                 duration: root.animMs
                 easing.type: root.animBounce > 0 ? Easing.OutBack : Easing.InOutCubic
@@ -4571,6 +4681,7 @@ PanelWindow {
             }
         }
         Behavior on height {
+            enabled: !root.barJump
             NumberAnimation {
                 duration: root.morphing ? root.animMs : root.animQuick
                 easing.type: root.animBounce > 0 ? Easing.OutBack
@@ -4703,6 +4814,7 @@ PanelWindow {
             id: expandTimer; interval: 120
             onTriggered: {
                 if (!capsuleHover.hovered || root.launcherOpen) return;
+                if (root.islandOut) return;   // PANACEA-LOCAL
                 if (!root.hoverExpandArmed) return;
                 // пока висит уведомление, наведение не раскрывает панель:
                 // иначе до крестика не добраться
@@ -4740,7 +4852,8 @@ PanelWindow {
             enabled: !root.expanded && !root.pillDragging && !root.cardOnPill   // PANACEA-LOCAL
                      && !(root.osdActive && !root.railMode)
             cursorShape: Qt.PointingHandCursor
-            onClicked: capsule.openPanel()
+            // PANACEA-LOCAL: with an island out, the bar puts it away
+            onClicked: root.island !== "" ? root.closeIsland() : capsule.openPanel()
         }
 
         // В режиме pillKeepVisible при открытой отдельной панели клик по фону острова закрывает её
@@ -6710,7 +6823,7 @@ PanelWindow {
         readonly property bool sheet: root.railFlat
         property real tuck: showMe ? 0 : 1
         Behavior on tuck {
-            enabled: detachedPanel.sheet
+            enabled: detachedPanel.sheet && !root.drawerSnap
             NumberAnimation {
                 duration: detachedPanel.showMe ? root.animMs : root.animFast + 40
                 easing.type: detachedPanel.showMe ? Easing.OutCubic : Easing.InCubic
@@ -6832,6 +6945,17 @@ PanelWindow {
         }
     }
 
+    // PANACEA-LOCAL: the layout island (Control Center > Layout, `pill layout`)
+    BarIsland {
+        id: layoutIsland
+        sys: root
+        anchors.fill: parent
+        open: root.island === "layout"
+        content: Component { LayoutView { sys: root } }
+        onCloseRequested: root.closeIsland()
+        onFolded: root.islandFolded()
+    }
+
     // PANACEA-LOCAL: the sheet's flares into the rail, moving with it
     Repeater {
         model: ["left", "right"]
@@ -6904,6 +7028,7 @@ PanelWindow {
     // the left and right ones. Before = its top or left end.
     NotchCorner {
         id: notchBefore
+        z: 51   // PANACEA-LOCAL: with the bar, above an island's dim
         // «до» острова: слева от него, а у боковых кромок — над ним
         side: root.railMode ? (root.pillAtRight ? "left" : "right")
             : root.pillSide ? (root.pillAtLeft ? "right" : "left") : "left"
@@ -6934,6 +7059,7 @@ PanelWindow {
     }
     NotchCorner {
         id: notchAfter
+        z: 51   // PANACEA-LOCAL
         // «после» острова: справа от него, а у боковых кромок — под ним
         side: root.railFull ? (root.pillAtRight ? "left" : "right")
             : root.railFlat ? "left"
