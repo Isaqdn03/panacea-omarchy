@@ -8,10 +8,6 @@
 #       ~/.local/state/panacea/health/report.txt and sends one notification:
 #       after an update always, otherwise only when something needs attention.
 #       Exit status: 0 healthy, 1 something to review, 2 something broken.
-#   health.sh baseline
-#       Records the Omarchy files each companion takes the place of
-#       (upstream/<name>.json). Run it once a companion has been checked
-#       against them, and commit the result.
 #   health.sh install
 #       Installs the post-update and post-boot hooks (omarchy hook install).
 #
@@ -25,6 +21,7 @@ plugin_id="isaqdn.panacea"
 plugins="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
 shell_json="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json"
 bindings="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/bindings.lua"
+panacea_settings="${XDG_CONFIG_HOME:-$HOME/.config}/panacea/settings.json"
 state="${XDG_STATE_HOME:-$HOME/.local/state}/panacea/health"
 report="$state/report.txt"
 omarchy_path="${OMARCHY_PATH:-/usr/share/omarchy}"
@@ -108,13 +105,25 @@ check_companions() {
     warn "$out"
   fi
 
+  # The notifications companion runs only with Panacea's notifEngine
+  # "omarchy"; with "panacea", Panacea's own server does, and the two must
+  # never run together.
+  local engine
+  engine="$(jq -r '.notifEngine // "panacea"' "$panacea_settings" 2>/dev/null || echo panacea)"
+
   list="$(omarchy plugin list --json 2>/dev/null)"
   for name in $(companion_names); do
     id="$plugin_id-$name"
     want="$(jq -r '.omarchy.clonedFrom // empty' "$here/companions/$name/manifest.json")"
     enabled="$(jq -r --arg id "$id" '.[] | select(.id == $id) | .enabled' <<<"$list")"
     slot="$(jq -r --arg id "$id" '.[] | select(.id == $id) | .clonedFrom' <<<"$list")"
-    if [[ $enabled != true ]]; then
+    if [[ $name == notifications && $engine != omarchy ]]; then
+      if [[ $enabled == true ]]; then
+        fail "$id is on, but Panacea draws notifications itself (notifEngine \"$engine\"): two notification servers (omarchy plugin disable $id)"
+      else
+        ok "$id is off: Panacea draws notifications itself"
+      fi
+    elif [[ $enabled != true ]]; then
       fail "$id is not enabled (omarchy plugin enable $id)"
     elif [[ -n $want && $slot != "$want" ]]; then
       fail "$id no longer takes the $want slot: Omarchy may have changed how clones work"
@@ -124,19 +133,19 @@ check_companions() {
   done
 }
 
-# Each companion stands in for one of Omarchy's plugins. upstream/<name>.json
-# holds the hashes of that plugin's files when the companion was last checked
-# against them; any difference is Omarchy changing something the companion
-# replaces, so it needs a look before it drifts.
+# Each companion stands in for one of Omarchy's plugins. upstream/<name>/
+# keeps that plugin's files as the companion was last checked against them
+# (companions.sh baseline); any difference is Omarchy changing something the
+# companion replaces or redraws, for `companions.sh sync` to bring in.
 check_upstream() {
-  local catalog name base want dir version f hash have
+  local catalog name base want dir version f
   catalog="$(omarchy-plugin-catalog 2>/dev/null)"
   for name in $(companion_names); do
     want="$(jq -r '.omarchy.clonedFrom // empty' "$here/companions/$name/manifest.json")"
     [[ -n $want ]] || continue
-    base="$here/upstream/$name.json"
-    if [[ ! -f $base ]]; then
-      warn "$plugin_id-$name has no baseline (scripts/health.sh baseline)"
+    base="$here/upstream/$name"
+    if [[ ! -d $base ]]; then
+      warn "$plugin_id-$name has no baseline (scripts/companions.sh baseline $name)"
       continue
     fi
     dir="$(jq -r --arg id "$want" '.[] | select(.id == $id) | .sourceDir' <<<"$catalog")"
@@ -144,21 +153,20 @@ check_upstream() {
       fail "Omarchy no longer ships $want, the plugin $plugin_id-$name stands in for"
       continue
     fi
-    version="$(jq -r '.omarchy' "$base")"
+    version="$(jq -r '.omarchy' "$base.json" 2>/dev/null || echo unknown)"
     local changed=()
-    while IFS=$'\t' read -r f hash; do
-      if [[ ! -f $dir/$f ]]; then
-        changed+=("$f (gone)")
-      else
-        have="$(sha256sum "$dir/$f" | cut -d' ' -f1)"
-        [[ $have == "$hash" ]] || changed+=("$f")
+    for f in "$base"/*; do
+      [[ -f $dir/$(basename "$f") ]] || changed+=("$(basename "$f") (gone)")
+    done
+    for f in "$dir"/*; do
+      if [[ ! -f $base/$(basename "$f") ]]; then
+        changed+=("$(basename "$f") (new)")
+      elif ! cmp -s "$f" "$base/$(basename "$f")"; then
+        changed+=("$(basename "$f")")
       fi
-    done < <(jq -r '.files | to_entries[] | [.key, .value] | @tsv' "$base")
-    while IFS= read -r f; do
-      jq -e --arg f "$f" '.files | has($f)' "$base" >/dev/null || changed+=("$f (new)")
-    done < <(cd "$dir" && find . -maxdepth 1 -type f -printf '%f\n' | sort)
+    done
     if ((${#changed[@]})); then
-      warn "Omarchy changed $want since the $version baseline (${changed[*]}): review $plugin_id-$name, then scripts/health.sh baseline"
+      warn "Omarchy changed $want since $version (${changed[*]}): run scripts/companions.sh sync $name"
     else
       ok "Omarchy's $want is as $plugin_id-$name last saw it ($version)"
     fi
@@ -255,28 +263,6 @@ check() {
   return 0
 }
 
-baseline() {
-  local catalog version name want dir
-  catalog="$(omarchy-plugin-catalog 2>/dev/null)"
-  version="$(omarchy version 2>/dev/null || echo unknown)"
-  mkdir -p "$here/upstream"
-  for name in $(companion_names); do
-    want="$(jq -r '.omarchy.clonedFrom // empty' "$here/companions/$name/manifest.json")"
-    [[ -n $want ]] || continue
-    dir="$(jq -r --arg id "$want" '.[] | select(.id == $id) | .sourceDir' <<<"$catalog")"
-    if [[ ! -d $dir ]]; then
-      echo "Omarchy does not ship $want" >&2
-      return 2
-    fi
-    (cd "$dir" && find . -maxdepth 1 -type f -printf '%f\n' | sort | while IFS= read -r f; do
-      printf '%s\t%s\n' "$f" "$(sha256sum "$f" | cut -d' ' -f1)"
-    done) | jq -Rn --arg want "$want" --arg version "$version" \
-      '{clonedFrom: $want, omarchy: $version, files: ([inputs | split("\t") | {(.[0]): .[1]}] | add)}' \
-      >"$here/upstream/$name.json"
-    echo "baseline: $plugin_id-$name <- $want (Omarchy $version)"
-  done
-}
-
 install_hooks() {
   omarchy hook install post-update "$here/hooks/post-update/panacea-health"
   omarchy hook install post-boot "$here/hooks/post-boot/panacea-health"
@@ -285,10 +271,9 @@ install_hooks() {
 
 case "${1:-}" in
   check) check "${2:-}" ;;
-  baseline) baseline ;;
   install) install_hooks ;;
   *)
-    echo "usage: health.sh check [--after-update|--at-boot] | baseline | install" >&2
+    echo "usage: health.sh check [--after-update|--at-boot] | install" >&2
     exit 2
     ;;
 esac

@@ -29,6 +29,23 @@ omarchy plugin enable isaqdn.panacea-osd
 omarchy restart shell
 ```
 
+### Notifications: Panacea's own, or Omarchy's drawn the Panacea way
+
+Panacea draws notifications with its own server by default. To run Omarchy's
+instead (grouped stacks, actions and replies, per-app snooze, verification
+codes, the notification panel), drawn in Panacea's look:
+
+```bash
+jq '.notifEngine = "omarchy"' ~/.config/panacea/settings.json > /tmp/panacea.json \
+  && mv /tmp/panacea.json ~/.config/panacea/settings.json
+omarchy plugin enable isaqdn.panacea-notifications
+omarchy restart shell
+```
+
+Back: `omarchy plugin disable isaqdn.panacea-notifications`, set `notifEngine` to
+`"panacea"`, `omarchy restart shell`. Never both at once: there is one
+notification server per session, and the health check says so.
+
 Update with `omarchy plugin update isaqdn.panacea`. It shows the diff, then
 fast-forwards the checkout. Run `scripts/companions.sh install` afterwards if
 the health check says a companion is out of date.
@@ -103,11 +120,25 @@ plugin's calls to the companion. Omarchy keeps the service; Panacea draws it.
 | Companion | Stands in for | What it does |
 | --- | --- | --- |
 | `isaqdn.panacea-osd` | `omarchy.osd` | Sends the volume, brightness and media pop-ups to Panacea's rail |
+| `isaqdn.panacea-notifications` | `omarchy.notifications` | Omarchy's notifications, drawn in Panacea's look; hosts the notification panel at the top right |
 
 Each one lives in `companions/<name>/` and is installed as its own plugin folder
 by `scripts/companions.sh install`: Omarchy only loads plugins at the top level
 of `~/.config/omarchy/plugins`, and refuses a symlinked one. Edit the copy in
 this repo, then install it.
+
+A companion that redraws an Omarchy surface starts as an exact copy of it,
+`scripts/companions.sh adopt <omarchy-id> <name>`, and changes as few lines as
+it can, each marked `// panacea`. The look comes from Panacea itself:
+`PanaceaLook.qml` asks `omarchy-shell pill look` for Panacea's resolved colours
+and type, so the companion follows Panacea's theme and settings.
+
+`upstream/<name>/` keeps the Omarchy files the companion was last checked
+against. When Omarchy changes them, `scripts/companions.sh sync <name>` brings
+the changes in: a file the companion never changed takes Omarchy's version, and
+one it changed is merged three ways (`git merge-file`), keeping the `// panacea`
+lines. A real conflict stops with git's markers in the file; resolve it, then
+`scripts/companions.sh baseline <name>`.
 
 ## Health check
 
@@ -128,9 +159,8 @@ the shell first, so the new Omarchy is what gets checked) and at login. After an
 update it always sends one notification; at login, only when something needs
 attention. Click it for the full report.
 
-`upstream/<name>.json` holds the hashes of the Omarchy files a companion stands
-in for. When the check says Omarchy changed one, review the companion against
-the new files, then run `scripts/health.sh baseline` and commit.
+When it says Omarchy changed a plugin a companion stands in for, run
+`scripts/companions.sh sync <name>`, install, restart the shell, look, commit.
 
 ## Hacking
 

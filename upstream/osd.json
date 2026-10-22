@@ -1,9 +1,4 @@
 {
   "clonedFrom": "omarchy.osd",
-  "omarchy": "4.5.0rc1-1",
-  "files": {
-    "manifest.json": "a000056d0e7e372b2a46960a24fa578ab39a20cfd620d423688536fe68b40054",
-    "OsdModel.js": "07ef57284ec7af574a5320450a52b231845adfbe2b3ce18d5c0dbabca8f3ed9d",
-    "Osd.qml": "7ae5b2a17a3da502fb51d09a6113e77efbf3216d61d722969d9dd81367afb676"
-  }
+  "omarchy": "4.5.0rc1-1"
 }
