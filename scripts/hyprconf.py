@@ -15,7 +15,7 @@ data file that nothing reads:
   hyprconf.py apply-monitor DP-1 mode=3440x1440@119.99 position=auto-down
   hyprconf.py live input:sensitivity general:gaps_out
   hyprconf.py binds-get
-  hyprconf.py binds-set '{"github": "SUPER + I", "peek": "SUPER + grave"}'
+  hyprconf.py binds-set '{"github": "SUPER + I", "agents": "SUPER + U"}'
 
 Values are Lua literals: numbers, true/false, or "double-quoted strings".
 Every write keeps a backup in ~/.local/state/panacea/hypr-backups, reloads
@@ -423,7 +423,7 @@ ACTIONS = [
     ("powermenu", "Power menu", "Panacea", "powermenu", ""),
     ("github", "GitHub inbox", "More", "github", "SUPER + I"),
     ("agents", "Agent usage", "More", "agents", "SUPER + U"),
-    ("peek", "Peek at the rail", "More", "peek", "SUPER + grave"),
+    ("peek", "Peek at the rail", "More", "peek", ""),
     ("overview", "Workspace overview", "More", "overview", ""),
     ("weather", "Weather forecast", "More", "weather", ""),
     ("theme", "Wallpapers", "More", "theme", ""),
