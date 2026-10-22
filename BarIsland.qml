@@ -244,16 +244,15 @@ Item {
                 r: isl.flare
                 side: isl.flat ? (first ? "left" : "right")
                                 : (isl.edge === "left" ? "right" : "left")
-                x: isl.flat ? (first ? Math.round(isl.cardX) - width : Math.round(isl.cardX + isl.cardW))
-                   : isl.edge === "left" ? Math.round(isl.cardX) + isl.overlap
-                   : Math.round(isl.cardX + isl.cardW) - isl.overlap - width
-                y: isl.flat ? (isl.edge === "top" ? Math.round(isl.cardY) + isl.overlap
-                                                   : Math.round(isl.cardY + isl.cardH) - isl.overlap - height)
-                   : (first ? Math.round(isl.cardY) - height : Math.round(isl.cardY + isl.cardH))
-                transform: Scale {
-                    origin.y: isl.flare / 2
-                    yScale: isl.flat ? (isl.edge === "bottom" ? -1 : 1) : (first ? -1 : 1)
-                }
+                // the square where the card meets the bar; the corner reaches
+                // past it under both (NotchCorner.overlap)
+                sqX: isl.flat ? (first ? Math.round(isl.cardX) - r : Math.round(isl.cardX + isl.cardW))
+                     : isl.edge === "left" ? Math.round(isl.cardX) + isl.overlap
+                     : Math.round(isl.cardX + isl.cardW) - isl.overlap - r
+                sqY: isl.flat ? (isl.edge === "top" ? Math.round(isl.cardY) + isl.overlap
+                                                     : Math.round(isl.cardY + isl.cardH) - isl.overlap - r)
+                     : (first ? Math.round(isl.cardY) - r : Math.round(isl.cardY + isl.cardH))
+                flip: isl.flat ? isl.edge === "bottom" : first
             }
         }
 

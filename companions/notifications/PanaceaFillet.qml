@@ -38,9 +38,12 @@ Shape {
     strokeWidth: -1
 
     // Above the card: the corner is bottom-left, the arc's centre top-right.
-    // Below it: the corner is top-left, the arc's centre bottom-right.
+    // Below it: the corner is top-left, the arc's centre bottom-right. The
+    // fill reaches `overlap` past the box into the card too (a Shape draws
+    // outside its box), so no hairline opens where the two meet on a half
+    // pixel.
     startX: 0
-    startY: fillet.below ? 0 : fillet.radius
+    startY: fillet.below ? -fillet.overlap : fillet.radius + fillet.overlap
     PathLine { x: 0; y: fillet.below ? fillet.radius : 0 }
     PathLine { x: fillet.overlap; y: fillet.below ? fillet.radius : 0 }
     PathArc {
@@ -50,6 +53,7 @@ Shape {
       radiusY: fillet.radius
       direction: fillet.below ? PathArc.Clockwise : PathArc.Counterclockwise
     }
-    PathLine { x: 0; y: fillet.below ? 0 : fillet.radius }
+    PathLine { x: fillet.overlap + fillet.radius; y: fillet.below ? -fillet.overlap : fillet.radius + fillet.overlap }
+    PathLine { x: 0; y: fillet.below ? -fillet.overlap : fillet.radius + fillet.overlap }
   }
 }

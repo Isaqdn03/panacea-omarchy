@@ -6967,14 +6967,12 @@ PanelWindow {
             side: modelData === "left" ? "left" : "right"
             fill: root.colBg
             r: root.cornerR
-            x: modelData === "left" ? Math.round(detachedPanel.x) - width
-                                    : Math.round(detachedPanel.x + detachedPanel.width)
-            y: root.pillAtBottom ? Math.round(detachedPanel.y + detachedPanel.height) - height
-                                 : Math.round(detachedPanel.y)
-            transform: [
-                Scale { origin.y: root.cornerR / 2; yScale: root.pillAtBottom ? -1 : 1 },
-                Translate { y: sheetShift.y }
-            ]
+            sqX: modelData === "left" ? Math.round(detachedPanel.x) - r
+                                      : Math.round(detachedPanel.x + detachedPanel.width)
+            sqY: root.pillAtBottom ? Math.round(detachedPanel.y + detachedPanel.height) - r
+                                   : Math.round(detachedPanel.y)
+            flip: root.pillAtBottom
+            shiftY: sheetShift.y
         }
     }
 
@@ -7034,24 +7032,22 @@ PanelWindow {
             : root.pillSide ? (root.pillAtLeft ? "right" : "left") : "left"
         fill: root.colBg
         r: root.cornerR
-        transform: Scale {
-            origin.y: root.cornerR / 2
-            yScale: root.railMode ? (root.pillAtBottom ? -1 : 1)
-                  : (root.pillSide ? -1 : (root.pillAtBottom ? -1 : 1))   // PANACEA-LOCAL
-        }
+        flip: root.railMode ? root.pillAtBottom : (root.pillSide || root.pillAtBottom)   // PANACEA-LOCAL
         // Округляем: уголок — отдельный элемент со своими координатами, и на
         // полпикселя от капсулы он расходится с ней сглаженной серой щелью.
-        x: root.railFlat    ? 0
-         : root.railFull    ? (root.pillAtLeft ? Math.round(capsule.x + capsule.width)
-                                               : Math.round(capsule.x) - width)
-         : root.pillAtLeft  ? 0
-         : root.pillAtRight ? parent.width - width
-                            : Math.round(capsule.x) - width
-        y: root.railFlat ? (root.pillAtTop ? Math.round(capsule.y + capsule.height)
-                                           : Math.round(capsule.y) - height)
-         : root.railFull ? 0
-         : root.pillSide ? capsule.y - height
-         : root.pillAtBottom ? parent.height - height : 0
+        // PANACEA-LOCAL: rounding alone did not close it at 1.25 scale; the
+        // corner now reaches under the capsule (NotchCorner.overlap).
+        sqX: root.railFlat    ? 0
+           : root.railFull    ? (root.pillAtLeft ? Math.round(capsule.x + capsule.width)
+                                                 : Math.round(capsule.x) - r)
+           : root.pillAtLeft  ? 0
+           : root.pillAtRight ? parent.width - r
+                              : Math.round(capsule.x) - r
+        sqY: root.railFlat ? (root.pillAtTop ? Math.round(capsule.y + capsule.height)
+                                             : Math.round(capsule.y) - r)
+           : root.railFull ? 0
+           : root.pillSide ? Math.round(capsule.y) - r
+           : root.pillAtBottom ? parent.height - r : 0
         // Уголки уходят вместе с островом: в настройках он отрывается от
         // кромки, а на карусели обоев прячется целиком.
         opacity: root.cornersOn ? 1 : 0
@@ -7066,24 +7062,21 @@ PanelWindow {
             : root.pillSide ? (root.pillAtLeft ? "right" : "left") : "right"
         fill: root.colBg
         r: root.cornerR
-        transform: Scale {
-            origin.y: root.cornerR / 2
-            yScale: root.railFull ? -1 : root.railFlat ? (root.pillAtBottom ? -1 : 1)
-                  : (root.pillSide ? 1 : (root.pillAtBottom ? -1 : 1))   // PANACEA-LOCAL
-        }
+        flip: root.railFull || (root.railFlat ? root.pillAtBottom
+                                              : !root.pillSide && root.pillAtBottom)   // PANACEA-LOCAL
         // Здесь дробность копится вдвое — из x капсулы и из её ширины, —
         // поэтому именно правый уголок и отходил заметнее левого.
-        x: root.railFlat    ? parent.width - width
-         : root.railFull    ? (root.pillAtLeft ? Math.round(capsule.x + capsule.width)
-                                               : Math.round(capsule.x) - width)
-         : root.pillAtLeft  ? 0
-         : root.pillAtRight ? parent.width - width
-                            : Math.round(capsule.x + capsule.width)
-        y: root.railFlat ? (root.pillAtTop ? Math.round(capsule.y + capsule.height)
-                                           : Math.round(capsule.y) - height)
-         : root.railFull ? parent.height - height
-         : root.pillSide ? capsule.y + capsule.height
-         : root.pillAtBottom ? parent.height - height : 0
+        sqX: root.railFlat    ? parent.width - r
+           : root.railFull    ? (root.pillAtLeft ? Math.round(capsule.x + capsule.width)
+                                                 : Math.round(capsule.x) - r)
+           : root.pillAtLeft  ? 0
+           : root.pillAtRight ? parent.width - r
+                              : Math.round(capsule.x + capsule.width)
+        sqY: root.railFlat ? (root.pillAtTop ? Math.round(capsule.y + capsule.height)
+                                             : Math.round(capsule.y) - r)
+           : root.railFull ? parent.height - r
+           : root.pillSide ? Math.round(capsule.y + capsule.height)
+           : root.pillAtBottom ? parent.height - r : 0
         opacity: root.cornersOn ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: root.animFast } }
     }
