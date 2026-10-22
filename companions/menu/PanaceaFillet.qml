@@ -2,11 +2,16 @@ import QtQuick
 import QtQuick.Shapes
 
 // Panacea's flare: the concave corner where a surface that grows out of the
-// rail meets the rail's edge, as the rail itself meets the screen's top and
-// bottom. It sits on the rail's edge just above the card (below: false) or
-// just below it (below: true), `radius` wide and tall, and reaches `overlap`
-// into the rail: two windows' edges meeting on a fractional pixel at 1.25
-// scale would otherwise leave a faint seam between them.
+// rail meets the rail's edge, as the rail itself meets the screen's ends.
+// Drawn for a rail on the left: it sits on the rail's edge just above the
+// card (below: false) or just below it (below: true), `radius` wide and
+// tall, and reaches `overlap` into the rail: two windows' edges meeting on a
+// fractional pixel at 1.25 scale would otherwise leave a faint seam.
+//
+// For a rail on another edge the drawing is turned onto it (edge): mirrored
+// for the right; transposed for the top, so "above" lands left of the card
+// and "below" right of it, and transposed and flipped for the bottom. On the
+// top and bottom its box is `radius` wide and radius + overlap tall.
 Shape {
   id: fillet
 
@@ -14,10 +19,19 @@ Shape {
   property real overlap: 2
   property bool below: false
   property color color: "black"
+  property string edge: "left"
+  readonly property real reach: radius + overlap
 
   width: radius + overlap
   height: radius
   preferredRendererType: Shape.CurveRenderer
+
+  transform: Matrix4x4 {
+    matrix: fillet.edge === "right" ? Qt.matrix4x4(-1, 0, 0, fillet.reach, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+          : fillet.edge === "top" ? Qt.matrix4x4(0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1)
+          : fillet.edge === "bottom" ? Qt.matrix4x4(0, 1, 0, 0, -1, 0, 0, fillet.reach, 0, 0, 1, 0, 0, 0, 0, 1)
+          : Qt.matrix4x4()
+  }
 
   ShapePath {
     fillColor: fillet.color

@@ -12,11 +12,13 @@ import qs.Commons as Commons
 //
 // The panel grows out of Panacea's rail, as the menu does (companions/menu):
 // opening asks Panacea to keep its rail out (`pill holdFor notifications
-// <screen>`), and the answer says where the card attaches: the rail's edge on
-// the rail's screen, the screen's own edge on the others. The card then
-// slides out from behind that edge once the rail itself is most of the way
-// out, with Panacea's flares where it meets the rail, and everything but the
-// rail's column dims. Closing folds it back in, and the rail may hide again.
+// <screen>`), and the answer says where the card attaches: which edge the
+// rail is on, and how far it reaches in on this screen (off; 0 where it is
+// not shown, so the card meets the screen's own edge). The card then slides
+// out from behind the rail once the rail itself is most of the way out,
+// centred along it, with Panacea's flares where it meets the rail, and
+// everything but the rail dims. Closing folds it back in, and the rail may
+// hide again.
 // Without Panacea, or with Panacea off the rail, it opens as a card of its own
 // at the top right, beside the toasts.
 //
@@ -59,7 +61,11 @@ PanelWindow {
 
   property var dock: ({})
   readonly property bool docked: dock.attach === true
-  readonly property real attachX: docked ? Number(dock.x || 0) : 0
+  readonly property string edge: docked && ["top", "bottom", "right"].indexOf(dock.edge) >= 0 ? dock.edge : "left"
+  readonly property bool flat: edge === "top" || edge === "bottom"
+  // how far the rail reaches in from its edge (x: Panacea from before the
+  // rail had other edges)
+  readonly property real attachOff: docked ? Number(dock.off !== undefined ? dock.off : (dock.x || 0)) : 0
   readonly property real flare: docked ? Number(dock.flare || 0) : 0
   // Into the rail, so two windows meeting on a fractional pixel at 1.25
   // scale leave no seam.
@@ -76,22 +82,30 @@ PanelWindow {
     try { if (answer.ran && answer.output) parsed = JSON.parse(answer.output) } catch (e) { parsed = ({}) }
     return parsed
   }
-  readonly property bool fromDrawer: docked && Number(dock.drawerW || 0) > attachX
+  readonly property bool fromDrawer: docked && !flat && Number(dock.drawerW || 0) > attachOff
 
   // morph: 0 = the drawer's shape, 1 = the card's own. Only the opening from
   // the drawer moves it; it rests at 1.
   property real morph: 1
   function mix(from, to) { return from + (to - from) * morph }
-  readonly property real ownWidth: contentWidth + (docked ? overlap : 0)
-  readonly property real drawerWidth: Number(dock.drawerW || 0) - attachX + overlap
-  readonly property real ownY: docked
-    ? Math.max(margin, Math.min(cardTop >= 0 ? cardTop : 0, screenH - margin - contentHeight))
-    : margin
+  readonly property real ownWidth: contentWidth + (docked && !flat ? overlap : 0)
+  readonly property real ownHeight: contentHeight + (docked && flat ? overlap : 0)
+  readonly property real drawerWidth: Number(dock.drawerW || 0) - attachOff + overlap
+  // In dockClip, which starts at the rail's inner side: against the rail,
+  // centred along it (on a side rail at the height it opened at).
+  readonly property real ownX: !docked ? Math.round(dockClip.width - margin - ownWidth)
+    : edge === "left" ? 0
+    : edge === "right" ? dockClip.width - ownWidth
+    : Math.round((dockClip.width - ownWidth) / 2)
+  readonly property real ownY: !docked ? margin
+    : edge === "top" ? 0
+    : edge === "bottom" ? dockClip.height - ownHeight
+    : Math.max(margin, Math.min(cardTop >= 0 ? cardTop : 0, screenH - margin - contentHeight))
 
   // --- size ----------------------------------------------------------------
 
-  readonly property real availableCardWidth: screenW > 0 ? Math.max(120, screenW - attachX - margin * 2) : 0
-  readonly property real availableCardHeight: screenH > 0 ? Math.max(120, screenH - margin * 2) : 0
+  readonly property real availableCardWidth: screenW > 0 ? Math.max(120, screenW - (flat ? 0 : attachOff) - margin * 2) : 0
+  readonly property real availableCardHeight: screenH > 0 ? Math.max(120, screenH - (flat ? attachOff : 0) - margin * 2) : 0
   readonly property real verticalContentInset: padding * 2
 
   function fittedContentWidth(width, cap) {
@@ -228,7 +242,7 @@ PanelWindow {
     morph = 1
     contentHolder.opacity = 1
     if (PanaceaLook.animMs <= 0) {
-      dockSlide.x = 0; card.opacity = 1; card.scale = 1; scrimFill.opacity = 1
+      dockSlide.x = 0; dockSlide.y = 0; card.opacity = 1; card.scale = 1; scrimFill.opacity = 1
       settled = true
       if (fromDrawer) { drawerPending = true; dropDrawer() }
     } else if (fromDrawer && !fromHere) {
@@ -236,17 +250,17 @@ PanelWindow {
       // dissolves; then the drawer goes and the card shrinks into its own.
       // The content starts at 1%, not 0, so its first frame is drawn now,
       // while nothing moves, rather than halfway through the shrink.
-      dockSlide.x = 0; card.opacity = 0; card.scale = 1; scrimFill.opacity = 0
+      dockSlide.x = 0; dockSlide.y = 0; card.opacity = 0; card.scale = 1; scrimFill.opacity = 0
       morph = 0
       contentHolder.opacity = 0.01
       drawerPending = true
       shapeMotion.start()
     } else if (docked) {
       card.opacity = 1; card.scale = 1
-      if (!fromHere) { dockSlide.x = tuckedX; scrimFill.opacity = 0 }
+      if (!fromHere) { dockSlide.x = tuckedX; dockSlide.y = tuckedY; scrimFill.opacity = 0 }
       slideMotion.start()
     } else {
-      dockSlide.x = 0
+      dockSlide.x = 0; dockSlide.y = 0
       if (!fromHere) { card.opacity = 0; card.scale = 0.965 }
       popMotion.start()
     }
@@ -270,8 +284,11 @@ PanelWindow {
 
   // --- motion --------------------------------------------------------------
 
-  // Render-thread animators, so a busy frame cannot skip them.
-  readonly property real tuckedX: -(card.width + flare + overlap + 8)
+  // Render-thread animators, so a busy frame cannot skip them. Tucked: as
+  // far behind the rail as the card and its flares reach, along its normal.
+  readonly property real tuckReach: (flat ? card.height : card.width) + flare + overlap + 8
+  readonly property real tuckedX: edge === "left" ? -tuckReach : edge === "right" ? tuckReach : 0
+  readonly property real tuckedY: edge === "top" ? -tuckReach : edge === "bottom" ? tuckReach : 0
 
   // From the drawer to the card: the card fades in over the drawer, the
   // drawer goes, then the shape shrinks, easing out like the slide. The
@@ -301,7 +318,10 @@ PanelWindow {
     SequentialAnimation {
       // The rail first, when it was hidden.
       PauseAnimation { duration: Math.round(Number(root.dock.railMs || 0) * 0.6) }
-      XAnimator { target: dockSlide; to: 0; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }
+      ParallelAnimation {
+        XAnimator { target: dockSlide; to: 0; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }
+        YAnimator { target: dockSlide; to: 0; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }
+      }
     }
     onFinished: root.settled = true
   }
@@ -316,6 +336,7 @@ PanelWindow {
   ParallelAnimation {
     id: foldMotion
     XAnimator { target: dockSlide; to: root.tuckedX; duration: PanaceaLook.animFast + 40; easing.type: Easing.InCubic }
+    YAnimator { target: dockSlide; to: root.tuckedY; duration: PanaceaLook.animFast + 40; easing.type: Easing.InCubic }
     OpacityAnimator { target: scrimFill; to: 0; duration: PanaceaLook.animFast + 40; easing.type: Easing.InCubic }
     onFinished: root.finishClose()
   }
@@ -328,12 +349,15 @@ PanelWindow {
 
   // --- the dim and outside clicks ------------------------------------------
 
-  // Out of the rail, the dim leaves the rail's column alone, so the rail, its
-  // flares and the card read as one shape over the windows.
+  // Out of the rail, the dim leaves the rail alone, so the rail, its flares
+  // and the card read as one shape over the windows.
   Rectangle {
     id: scrimFill
     anchors.fill: parent
-    anchors.leftMargin: root.attachX
+    anchors.leftMargin: root.edge === "left" ? root.attachOff : 0
+    anchors.rightMargin: root.edge === "right" ? root.attachOff : 0
+    anchors.topMargin: root.edge === "top" ? root.attachOff : 0
+    anchors.bottomMargin: root.edge === "bottom" ? root.attachOff : 0
     visible: root.docked
     color: PanaceaLook.scrim
     opacity: 0
@@ -383,13 +407,15 @@ PanelWindow {
   // --- the card ------------------------------------------------------------
 
   // Out of the rail, the card and its flares sit in dockSlide, which moves
-  // as one, inside dockClip, which starts at the rail's edge: the card comes
-  // out from behind the rail, never across it.
+  // as one, inside dockClip, which starts at the rail's inner side: the card
+  // comes out from behind the rail, never across it.
   Item {
     id: dockClip
-    x: root.docked ? root.attachX - root.overlap : 0
-    width: root.width - x
-    height: root.height
+    readonly property real cut: root.docked ? root.attachOff - root.overlap : 0
+    x: root.edge === "left" ? cut : 0
+    y: root.edge === "top" ? cut : 0
+    width: root.width - (root.edge === "left" || root.edge === "right" ? cut : 0)
+    height: root.height - (root.flat ? cut : 0)
     clip: root.docked
 
     Item {
@@ -397,21 +423,27 @@ PanelWindow {
       width: parent.width
       height: parent.height
 
+      // Where the card meets the rail: above and below it on a side rail,
+      // left and right of it on a top or bottom one.
       PanaceaFillet {
-        visible: root.docked && root.flare > 0
+        visible: root.docked && root.flare > 0 && root.morph > 0.98
+        edge: root.edge
         radius: root.flare
         overlap: root.overlap
         color: card.color
-        y: card.y - height
+        x: root.flat ? card.x - radius : root.edge === "right" ? dockSlide.width - reach : 0
+        y: root.flat ? (root.edge === "top" ? 0 : dockSlide.height - reach) : card.y - radius
       }
 
       PanaceaFillet {
-        visible: root.docked && root.flare > 0
+        visible: root.docked && root.flare > 0 && root.morph > 0.98
+        edge: root.edge
         below: true
         radius: root.flare
         overlap: root.overlap
         color: card.color
-        y: card.y + card.height
+        x: root.flat ? card.x + card.width : root.edge === "right" ? dockSlide.width - reach : 0
+        y: root.flat ? (root.edge === "top" ? 0 : dockSlide.height - reach) : card.y + card.height
       }
 
       Rectangle {
@@ -419,17 +451,20 @@ PanelWindow {
         // At rest (morph 1) the card's own size and place; opening from the
         // drawer, it starts as the drawer: full height, as wide, square.
         width: root.mix(root.drawerWidth, root.ownWidth)
-        height: root.mix(root.screenH, root.contentHeight)
-        x: root.docked ? 0 : Math.round(dockSlide.width - root.margin - width)
+        height: root.mix(root.screenH, root.ownHeight)
+        // a right rail's drawer and card grow from the right
+        x: root.edge === "right" ? dockSlide.width - width : root.ownX
         y: root.mix(0, root.ownY)
         color: PanaceaLook.bg
         radius: PanaceaLook.modalRadius
         // Out of the rail its rail side is square and the flares round it
-        // into the rail; on its own, all four corners are round.
-        topLeftRadius: root.docked ? 0 : radius
-        bottomLeftRadius: root.docked ? 0 : radius
-        topRightRadius: root.mix(0, radius)
-        bottomRightRadius: root.mix(0, radius)
+        // into the rail; on its own, all four corners are round. Coming from
+        // the drawer, its free corners round as it shrinks.
+        function corner(onRail) { return root.docked && onRail ? 0 : root.mix(0, radius) }
+        topLeftRadius: corner(root.edge === "left" || root.edge === "top")
+        topRightRadius: corner(root.edge === "right" || root.edge === "top")
+        bottomLeftRadius: corner(root.edge === "left" || root.edge === "bottom")
+        bottomRightRadius: corner(root.edge === "right" || root.edge === "bottom")
         border.width: root.docked ? 0 : 1
         border.color: PanaceaLook.line
         clip: true
@@ -455,8 +490,11 @@ PanelWindow {
           // The card's own content box, whatever the card's size on the way:
           // the panel never reflows while the shape moves or the card's
           // height animates, the card's clip shows what fits.
-          x: root.padding + (root.docked ? root.overlap : 0)
-          y: root.padding
+          // against a right rail it keeps to the card's right, where the
+          // drawer it may come from is pinned
+          x: root.edge === "right" ? card.width - root.overlap - root.padding - width
+             : root.padding + (root.docked && root.edge === "left" ? root.overlap : 0)
+          y: root.padding + (root.docked && root.edge === "top" ? root.overlap : 0)
           width: root.contentWidth - root.padding * 2
           height: root.contentHeight - root.padding * 2
           // Right-to-left languages read the card mirrored; the card itself
