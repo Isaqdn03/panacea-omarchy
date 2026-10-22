@@ -14,9 +14,9 @@ Item {
   property string value: ""
   // Plain strings or { value, label } objects, like the kit's Dropdown.
   property var options: []
-  property color foreground: Commons.Color.popups.text
-  property string fontFamily: Style.font.family
-  property int rowHeight: Style.spacing.controlHeight
+  property color foreground: PanaceaLook.fg  // panacea
+  property string fontFamily: PanaceaLook.font  // panacea
+  property int rowHeight: 32  // panacea
 
   signal picked(string value)
 
@@ -29,58 +29,58 @@ Item {
   }
 
   implicitWidth: Style.spacing.dropdownWidth
-  implicitHeight: label !== "" ? rowHeight + Style.spacing.huge : rowHeight
+  implicitHeight: label !== "" ? rowHeight + labelText.implicitHeight + stack.spacing : rowHeight  // panacea: Panacea's label is taller
 
   Column {
     id: stack
     anchors.fill: parent
-    spacing: Style.spacing.labelGap
+    spacing: 8  // panacea
 
     Text {
+      id: labelText  // panacea
       textFormat: Text.PlainText
       visible: picker.label !== ""
       text: picker.label
-      color: Qt.darker(picker.foreground, 1.4)
+      color: picker.foreground  // panacea
       font.family: picker.fontFamily
-      font.pixelSize: Style.font.caption
-      font.bold: true
+      font.pixelSize: PanaceaLook.fontSize - 1  // panacea
     }
 
     BorderSurface {
       id: trigger
       width: parent.width
       height: picker.rowHeight
-      radius: Style.cornerRadius
+      radius: PanaceaLook.chipRadius  // panacea
 
       readonly property bool hot: triggerArea.containsMouse || menu.opened
-      color: Style.controlFill(menu.opened, trigger.hot, picker.foreground, Commons.Color.accent)
-      borderSpec: Border.controlSpec(menu.opened ? "focus" : trigger.hot ? "hover-cursor" : "normal",
-                                     picker.foreground, Commons.Color.accent)
+      color: trigger.hot ? PanaceaLook.chipHover : PanaceaLook.chipFill  // panacea
+      borderSpec: Border.none()  // panacea
+      Behavior on color { ColorAnimation { duration: PanaceaLook.animHover } }  // panacea
 
       Text {
         anchors.left: parent.left
         anchors.right: chevron.left
         anchors.verticalCenter: parent.verticalCenter
-        anchors.leftMargin: trigger.borderLeft + Style.spacing.controlPaddingX
-        anchors.rightMargin: Style.spacing.md
+        anchors.leftMargin: 12  // panacea
+        anchors.rightMargin: 6  // panacea
         textFormat: Text.PlainText
         text: picker.labelFor(picker.value)
         elide: Text.ElideRight
         color: picker.foreground
         font.family: picker.fontFamily
-        font.pixelSize: Style.font.body
+        font.pixelSize: PanaceaLook.fontSize - 3  // panacea
       }
 
       Text {
         id: chevron
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        anchors.rightMargin: trigger.borderRight + Style.spacing.controlGap
+        anchors.rightMargin: 10  // panacea
         textFormat: Text.PlainText
-        text: "\u{f0140}"
-        color: Qt.darker(picker.foreground, 1.2)
+        text: menu.opened ? "\u{f0143}" : "\u{f0140}"  // panacea: up while the list is open
+        color: PanaceaLook.muted  // panacea
         font.family: picker.fontFamily
-        font.pixelSize: Style.font.body
+        font.pixelSize: PanaceaLook.fontSize - 2  // panacea
       }
 
       MouseArea {
@@ -97,16 +97,16 @@ Item {
     id: menu
     y: stack.y + trigger.y + trigger.height + Style.spacing.xxs
     width: picker.width
-    padding: Style.spacing.hairline
+    padding: 6  // panacea
 
     background: BorderSurface {
-      color: Commons.Color.popups.background
-      radius: Style.cornerRadius
-      borderSpec: Border.controlSpec("normal", picker.foreground, Commons.Color.accent)
+      color: PanaceaLook.bg  // panacea
+      radius: PanaceaLook.rowRadius  // panacea
+      borderSpec: Border.flat(PanaceaLook.line, 1)  // panacea
     }
 
     contentItem: Column {
-      spacing: Style.spacing.labelGap
+      spacing: 2  // panacea
 
       Repeater {
         model: picker.options
@@ -116,22 +116,22 @@ Item {
           required property var modelData
           readonly property bool chosen: picker.optionValue(modelData) === String(picker.value)
           width: menu.availableWidth
-          height: Style.spacing.popupRowHeight
-          radius: Style.cornerRadius
-          color: rowArea.containsMouse ? Style.hoverFillFor(picker.foreground, Commons.Color.accent) : "transparent"
+          height: 30  // panacea
+          radius: 8  // panacea
+          color: row.chosen ? PanaceaLook.fg : rowArea.containsMouse ? PanaceaLook.rowHover : "transparent"  // panacea
 
           Text {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            anchors.leftMargin: Style.spacing.controlPaddingX
-            anchors.rightMargin: Style.spacing.controlPaddingX
+            anchors.leftMargin: 10  // panacea
+            anchors.rightMargin: 10  // panacea
             textFormat: Text.PlainText
             text: picker.optionLabel(row.modelData)
             elide: Text.ElideRight
-            color: rowArea.containsMouse ? Style.hoverStateColor(picker.foreground, Commons.Color.accent) : picker.foreground
+            color: row.chosen ? PanaceaLook.bg : picker.foreground  // panacea
             font.family: picker.fontFamily
-            font.pixelSize: Style.font.body
+            font.pixelSize: PanaceaLook.fontSize - 3  // panacea
             font.bold: row.chosen
           }
 

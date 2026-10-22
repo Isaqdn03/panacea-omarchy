@@ -87,13 +87,13 @@ Item {
   }
 
   // ------------------------------------------------------------- looks
-  readonly property color panelFg: Commons.Color.popups.text
-  readonly property color dim: Qt.darker(panelFg, 1.4)
-  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
+  readonly property color panelFg: PanaceaLook.fg  // panacea
+  readonly property color dim: PanaceaLook.muted  // panacea
+  readonly property string fontFamily: PanaceaLook.font  // panacea
 
   // Do not disturb and snooze must never read as the same quiet state.
-  readonly property color silencedColour: Commons.Color.urgent
-  readonly property color snoozedColour: Commons.Color.accent
+  readonly property color silencedColour: PanaceaLook.crit  // panacea
+  readonly property color snoozedColour: PanaceaLook.on  // panacea
 
   readonly property string bell: "\u{f009a}"
   readonly property string bellOff: "\u{f009b}"
@@ -219,14 +219,13 @@ Item {
   }
 
   // ------------------------------------------------------------- the panel
-  KeyboardPanel {
+  PanaceaIsland {  // panacea: grows out of Panacea's rail
     id: panel
     anchorItem: root.anchorItem
     owner: root
     bar: root.bar
     open: root.opened
     focusTarget: panel.loadedContent
-    borderSpec: Border.flat(PanaceaLook.line, 1)  // panacea: a hairline, as on Panacea's cards
     contentWidth: panel.fittedContentWidth(Style.space(380))
     contentHeight: panel.fittedContentHeight(panel.loadedContentHeight, Style.space(520))
 
@@ -259,7 +258,15 @@ Item {
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
         interactive: contentHeight > height
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+        ScrollBar.vertical: ScrollBar {  // panacea: Panacea's thin scrollbar
+          id: panelBar  // panacea
+          policy: ScrollBar.AsNeeded
+          width: 3  // panacea
+          padding: 0  // panacea: the style pads 2 px a side, which left a 3 px bar no room for its thumb
+          // panacea: shown while the panel overflows, as Panacea's lists do (the
+          // style's fade-in never fires for the wheel)
+          contentItem: Rectangle { radius: 2; color: PanaceaLook.scrollThumb; opacity: panelBar.size < 1 ? 1 : 0 }  // panacea
+        }  // panacea
 
         Column {
           id: column
@@ -272,15 +279,18 @@ Item {
             width: parent.width
             spacing: Style.spacing.huge
 
-            PanelHero {
+            PanaceaHero {  // panacea
               width: parent.width
               title: I18n.t("notifications.title")
               meta: I18n.t("notifications.preferences")
               foreground: root.panelFg
               fontFamily: root.fontFamily
-              trailingControl: Component {
+              // panacea: Panacea's back arrow at the start of the header, in
+              // place of a close button at its end
+              iconTile: false  // panacea
+              iconComponent: Component {  // panacea
                 ActionButton {
-                  iconText: "\u{f00d}"
+                  iconText: "\u{f004d}"  // panacea: md-arrow_left
                   tooltipText: I18n.t("notifications.closePreferences")
                   onClicked: root.settingsView = false
                 }
@@ -304,7 +314,7 @@ Item {
               Hint { text: root.displayExplanation }
             }
 
-            PanelSeparator { foreground: root.panelFg }
+            PanaceaSeparator { foreground: root.panelFg }  // panacea
 
             Column {
               width: parent.width
@@ -323,7 +333,7 @@ Item {
               Hint { text: root.fullscreenOverlayExplanation }
             }
 
-            PanelSeparator { foreground: root.panelFg }
+            PanaceaSeparator { foreground: root.panelFg }  // panacea
 
             SwitchRow {
               label: I18n.t("notifications.groupBySource")
@@ -355,7 +365,7 @@ Item {
             width: parent.width
             spacing: Style.space(12)
 
-            PanelHero {
+            PanaceaHero {  // panacea
               id: hero
               width: parent.width
               title: I18n.t("notifications.title")
@@ -419,7 +429,7 @@ Item {
                   }
 
                   // On means notifications are coming through.
-                  ToggleSwitch {
+                  PanaceaSwitch {  // panacea
                     anchors.verticalCenter: parent.verticalCenter
                     checked: !root.quiet
                     foreground: root.panelFg
@@ -433,15 +443,15 @@ Item {
             BorderSurface {
               visible: root.sharingOfferPending
               width: parent.width
-              implicitHeight: sharingOfferContent.implicitHeight + Style.space(16)
-              color: "transparent"
-              borderSpec: Border.controlSpec("normal", root.panelFg, Commons.Color.accent)
-              radius: Style.cornerRadius
+              implicitHeight: sharingOfferContent.implicitHeight + 24  // panacea
+              color: PanaceaLook.rowFill  // panacea
+              borderSpec: Border.flat(PanaceaLook.line, 1)  // panacea
+              radius: PanaceaLook.rowRadius  // panacea
 
               Column {
                 id: sharingOfferContent
                 anchors.fill: parent
-                anchors.margins: Style.space(8)
+                anchors.margins: 12  // panacea
                 spacing: Style.space(5)
 
                 Text {
@@ -450,7 +460,7 @@ Item {
                   textFormat: Text.PlainText
                   color: root.panelFg
                   font.family: root.fontFamily
-                  font.pixelSize: Style.font.bodySmall
+                  font.pixelSize: PanaceaLook.fontSize - 3  // panacea
                   font.bold: true
                 }
 
@@ -509,7 +519,7 @@ Item {
             }
 
             // --------------------------------------------------- recent
-            PanelSeparator { visible: !root.quiet; foreground: root.panelFg }
+            PanaceaSeparator { visible: !root.quiet; foreground: root.panelFg }  // panacea
 
             SectionToggle {
               visible: !root.quiet
@@ -541,9 +551,9 @@ Item {
             }
 
             // --------------------------------------------------- held back
-            PanelSeparator { foreground: root.panelFg }
+            PanaceaSeparator { foreground: root.panelFg }  // panacea
 
-            PanelSectionHeader {
+            PanaceaSectionHeader {  // panacea
               text: root.quiet ? I18n.t("notifications.heldBack") : I18n.t("notifications.snoozedSources")
               foreground: root.panelFg
               fontFamily: root.fontFamily
@@ -571,17 +581,18 @@ Item {
                   width: parent.width
                   spacing: 0
 
-                  CursorSurface {
+                  PanaceaRow {  // panacea
                     width: parent.width
-                    height: Math.max(label.implicitHeight, controls.implicitHeight, Style.spacing.controlHeight)
+                    height: Math.max(label.implicitHeight, controls.implicitHeight, Style.spacing.controlHeight) + 16  // panacea
                     hasCursor: root.cursorLive && root.cursorAt === line.index
                     foreground: root.panelFg
 
                     Column {
                       id: label
                       anchors.left: parent.left
+                      anchors.leftMargin: 12  // panacea
                       anchors.verticalCenter: parent.verticalCenter
-                      width: parent.width - controls.width - Style.spacing.xl
+                      width: parent.width - controls.width - Style.spacing.xl - 12  // panacea
 
                       Text {
                         textFormat: Text.PlainText
@@ -589,7 +600,7 @@ Item {
                         text: line.modelData.label
                         color: root.panelFg
                         font.family: root.fontFamily
-                        font.pixelSize: Style.font.bodySmall
+                        font.pixelSize: PanaceaLook.fontSize - 3  // panacea
                         elide: Text.ElideRight
                       }
 
@@ -646,6 +657,7 @@ Item {
                     Row {
                       id: controls
                       anchors.right: parent.right
+                      anchors.rightMargin: 8  // panacea
                       anchors.verticalCenter: parent.verticalCenter
                       spacing: Style.spacing.xs
 
@@ -731,7 +743,7 @@ Item {
             }
 
             // --------------------------------------------------- history
-            PanelSeparator { foreground: root.panelFg }
+            PanaceaSeparator { foreground: root.panelFg }  // panacea
 
             SectionToggle {
               text: I18n.t("notifications.historyHeader").arg(I18n.formatNumber(root.history.length))
@@ -763,14 +775,13 @@ Item {
               }
             }
 
-            Button {
+            PanaceaButton {  // panacea
               visible: (root.quiet || root.snoozed.length > 1)
               width: parent.width
               text: I18n.t("notifications.resumeAll")
               bordered: true
               foreground: root.panelFg
               fontFamily: root.fontFamily
-              fontSize: Style.font.caption
               onClicked: {
                 if (!root.service) return
                 root.service.letEverythingThrough()
@@ -789,7 +800,7 @@ Item {
     textFormat: Text.PlainText
     color: root.dim
     font.family: root.fontFamily
-    font.pixelSize: Style.font.bodySmall
+    font.pixelSize: PanaceaLook.fontSize - 4  // panacea
     wrapMode: Text.WordWrap
   }
 
@@ -797,20 +808,18 @@ Item {
     textFormat: Text.PlainText
     color: root.dim
     font.family: root.fontFamily
-    font.pixelSize: Style.font.caption
+    font.pixelSize: PanaceaLook.fontSize - 5  // panacea
   }
 
-  component ActionButton: PanelActionButton {
+  component ActionButton: PanaceaIconButton {  // panacea
     foreground: root.panelFg
     fontFamily: root.fontFamily
   }
 
-  component ChoiceButton: Button {
+  component ChoiceButton: PanaceaButton {  // panacea
     bordered: true
     foreground: root.panelFg
     fontFamily: root.fontFamily
-    fontSize: Style.font.caption
-    verticalPadding: Style.spacing.hairline
   }
 
   component SwitchRow: Column {
@@ -820,7 +829,7 @@ Item {
     property bool checked: false
     signal toggled()
     width: parent ? parent.width : 0
-    spacing: Style.spacing.lg
+    spacing: 2  // panacea: the hint sits right under its label, as in Panacea's settings
 
     Row {
       width: parent.width
@@ -833,11 +842,11 @@ Item {
         textFormat: Text.PlainText
         color: root.panelFg
         font.family: root.fontFamily
-        font.pixelSize: Style.font.body
+        font.pixelSize: PanaceaLook.fontSize - 1  // panacea
         wrapMode: Text.WordWrap
       }
 
-      ToggleSwitch {
+      PanaceaSwitch {  // panacea
         id: toggle
         anchors.verticalCenter: parent.verticalCenter
         checked: switchRow.checked
@@ -859,7 +868,7 @@ Item {
     width: parent ? parent.width : 0
     height: Math.max(heading.implicitHeight, chevron.implicitHeight)
 
-    PanelSectionHeader {
+    PanaceaSectionHeader {  // panacea
       id: heading
       anchors.left: parent.left
       anchors.right: chevron.left
@@ -879,7 +888,7 @@ Item {
       id: chevron
       anchors.right: parent.right
       // The scrollbar owns the right-edge hit area even over this row.
-      anchors.rightMargin: Style.space(8)
+      anchors.rightMargin: 0  // panacea: Panacea's scrollbar is 3 px; the chevron lines up with the header's switch
       anchors.verticalCenter: parent.verticalCenter
       iconText: section.expanded ? root.chevronUp : root.chevronDown
       tooltipText: section.expanded ? section.hideTooltip : section.showTooltip
@@ -895,14 +904,14 @@ Item {
     property bool expandable: false
     property bool open: false
     width: parent ? parent.width : 0
-    leftPadding: Style.spacing.controlPaddingX
-    rightPadding: Style.spacing.controlPaddingX
-    topPadding: Style.spacing.md
-    bottomPadding: Style.spacing.md
+    leftPadding: 12  // panacea
+    rightPadding: 12  // panacea
+    topPadding: 10  // panacea
+    bottomPadding: 10  // panacea
     height: entryText.implicitHeight + contentTopInset + contentBottomInset
-    radius: Style.cornerRadius
-    color: Style.normalFillFor(root.panelFg, Commons.Color.accent)
-    borderSpec: Border.controlSpec("normal", root.panelFg, Commons.Color.accent)
+    radius: PanaceaLook.rowRadius  // panacea
+    color: PanaceaLook.rowFill  // panacea
+    borderSpec: Border.flat(PanaceaLook.line, 1)  // panacea
 
     MouseArea {
       anchors.fill: parent
@@ -933,8 +942,8 @@ Item {
         text: Store.redacted(entryCard.entry) ? I18n.t("notifications.redactedSummary") : (entryCard.entry.summary || "")
         textFormat: Text.PlainText
         color: root.panelFg
-        font.family: "Liberation Sans"
-        font.pixelSize: Style.font.title
+        font.family: root.fontFamily  // panacea
+        font.pixelSize: PanaceaLook.fontSize - 2  // panacea
         font.bold: true
         elide: Text.ElideRight
       }
@@ -944,9 +953,9 @@ Item {
         width: parent.width
         text: Store.redacted(entryCard.entry) ? I18n.t("notifications.redactedBody") : (entryCard.entry.bodyLine || "")
         textFormat: Text.PlainText
-        color: Qt.darker(root.panelFg, 1.15)
-        font.family: "Liberation Sans"
-        font.pixelSize: Style.font.title
+        color: PanaceaLook.muted  // panacea
+        font.family: root.fontFamily  // panacea
+        font.pixelSize: PanaceaLook.fontSize - 4  // panacea
         wrapMode: Text.WordWrap
         maximumLineCount: entryCard.open ? 2147483647 : 2
         elide: entryCard.open ? Text.ElideNone : Text.ElideRight

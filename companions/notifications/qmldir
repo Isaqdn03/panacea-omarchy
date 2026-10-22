@@ -3,6 +3,15 @@
 singleton PanaceaLook 1.0 PanaceaLook.qml
 DeedButton 1.0 DeedButton.qml
 NotificationPanel 1.0 NotificationPanel.qml
+PanaceaButton 1.0 PanaceaButton.qml
+PanaceaFillet 1.0 PanaceaFillet.qml
+PanaceaHero 1.0 PanaceaHero.qml
+PanaceaIconButton 1.0 PanaceaIconButton.qml
+PanaceaIsland 1.0 PanaceaIsland.qml
 PanaceaPanelHost 1.0 PanaceaPanelHost.qml
+PanaceaRow 1.0 PanaceaRow.qml
+PanaceaSectionHeader 1.0 PanaceaSectionHeader.qml
+PanaceaSeparator 1.0 PanaceaSeparator.qml
+PanaceaSwitch 1.0 PanaceaSwitch.qml
 Picker 1.0 Picker.qml
 Toast 1.0 Toast.qml

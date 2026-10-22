@@ -1,0 +1,410 @@
+import QtQuick
+import Quickshell
+import Quickshell.Hyprland
+import Quickshell.Wayland
+import qs.Commons
+import qs.Commons as Commons
+
+// Panacea's island, in place of the kit's KeyboardPanel for the notification
+// panel (NotificationPanel.qml, the line marked `// panacea`). It takes the
+// part of KeyboardPanel's API the panel uses, so the panel's own code stays
+// Omarchy's.
+//
+// The panel grows out of Panacea's rail, as the menu does (companions/menu):
+// opening asks Panacea to keep its rail out (`pill holdFor notifications
+// <screen>`), and the answer says where the card attaches: the rail's edge on
+// the rail's screen, the screen's own edge on the others. The card then
+// slides out from behind that edge once the rail itself is most of the way
+// out, with Panacea's flares where it meets the rail, and everything but the
+// rail's column dims. Closing folds it back in, and the rail may hide again.
+// Without Panacea, or with Panacea off the rail, it opens as a card of its own
+// at the top right, beside the toasts.
+//
+// Keyboard and clicks work as in KeyboardPanel: a brief Exclusive prime takes
+// focus on every open, then OnDemand; a click anywhere off the card, on any
+// monitor, closes it.
+PanelWindow {
+  id: root
+
+  required property Item anchorItem
+  property QtObject bar: null
+  property var owner: null
+  property bool open: false
+  property Item focusTarget: null
+  // Taken for KeyboardPanel's sake; the card draws Panacea's own hairline.
+  property var borderSpec: null
+  property int margin: Style.gapsOut
+  property int padding: PanaceaLook.modalPadding
+  property int contentWidth: 380
+  property int contentHeight: 200
+
+  // Built the first time the panel opens, then kept (KeyboardPanel's lazy
+  // content).
+  property Component content: null
+  property bool contentRequested: false
+  readonly property Item loadedContent: contentLoader.item
+  readonly property real loadedContentHeight: contentLoader.item ? contentLoader.item.implicitHeight : 0
+
+  function close() {
+    if (owner && "close" in owner) owner.close()
+    else root.open = false
+  }
+
+  readonly property var anchorWindow: anchorItem ? anchorItem.QsWindow.window : null
+  readonly property string screenName: screen ? String(screen.name || "") : ""
+  readonly property real screenW: screen ? screen.width : 0
+  readonly property real screenH: screen ? screen.height : 0
+
+  // --- where it attaches ---------------------------------------------------
+
+  property var dock: ({})
+  readonly property bool docked: dock.attach === true
+  readonly property real attachX: docked ? Number(dock.x || 0) : 0
+  readonly property real flare: docked ? Number(dock.flare || 0) : 0
+  // Into the rail, so two windows meeting on a fractional pixel at 1.25
+  // scale leave no seam.
+  readonly property int overlap: 2
+
+  function holdRail(name) {
+    var answer = IpcRegistry.call("pill", "holdFor", ["notifications", name])
+    var parsed = ({})
+    try { if (answer.ran && answer.output) parsed = JSON.parse(answer.output) } catch (e) { parsed = ({}) }
+    return parsed
+  }
+
+  // --- size ----------------------------------------------------------------
+
+  readonly property real availableCardWidth: screenW > 0 ? Math.max(120, screenW - attachX - margin * 2) : 0
+  readonly property real availableCardHeight: screenH > 0 ? Math.max(120, screenH - margin * 2) : 0
+  readonly property real verticalContentInset: padding * 2
+
+  function fittedContentWidth(width, cap) {
+    var desired = Math.max(1, Number(width) || 1)
+    var maxWidth = root.availableCardWidth > 0 ? root.availableCardWidth : desired
+    if (cap !== undefined && Number(cap) > 0) maxWidth = Math.min(maxWidth, Number(cap))
+    return Math.round(Math.min(desired, maxWidth))
+  }
+
+  function fittedContentHeight(implicitHeight, cap) {
+    var desired = Math.max(root.verticalContentInset, (Number(implicitHeight) || 0) + root.verticalContentInset)
+    var maxHeight = root.availableCardHeight > 0 ? root.availableCardHeight : desired
+    if (cap !== undefined && Number(cap) > 0) maxHeight = Math.min(maxHeight, Number(cap))
+    return Math.round(Math.min(desired, maxHeight))
+  }
+
+  // Out of the rail the card opens centred on the screen's height and keeps
+  // its top while it is open, so a section that expands grows it downward
+  // (and up only once it would leave the screen).
+  property int cardTop: -1
+
+  // --- lifetime ------------------------------------------------------------
+
+  // folding: closed, and still moving away; the window stays until it has.
+  property bool folding: false
+  // settled: the open motion is over, so size changes may animate.
+  property bool settled: false
+
+  screen: anchorWindow ? anchorWindow.screen : null
+  // Not `&& !!screen`: mapping the window updates its screen, which made
+  // this a binding loop. The anchor's window always has one.
+  visible: open || folding
+  color: "transparent"
+  exclusionMode: ExclusionMode.Ignore
+
+  // KeyboardPanel's namespace, for Omarchy's no_anim and the blur rule in
+  // looknfeel.lua: the motion here is the panel's own.
+  WlrLayershell.namespace: "omarchy-keyboard-panel"
+  WlrLayershell.layer: WlrLayer.Overlay
+  WlrLayershell.keyboardFocus: open
+    ? (focusPrimed ? WlrKeyboardFocus.OnDemand : WlrKeyboardFocus.Exclusive)
+    : WlrKeyboardFocus.None
+
+  anchors {
+    top: true
+    bottom: true
+    left: true
+    right: true
+  }
+
+  // As OverlayWindow does: keep the first frames transparent until the
+  // window has the output's size and scale, so it never opens stretched or
+  // soft. Fractional scale comes in 1/120ths.
+  readonly property var monitor: {
+    var monitors = Hyprland.monitors.values
+    for (var i = 0; i < monitors.length; i++)
+      if (screen && monitors[i].name === screen.name) return monitors[i]
+    return null
+  }
+  readonly property bool contentReady: visible && backingWindowVisible && !!screen
+    && width === screen.width && height === screen.height
+    && !!monitor && Math.round(devicePixelRatio * 120) === Math.round(monitor.scale * 120)
+  property bool revealed: false
+
+  onContentReadyChanged: {
+    revealed = false
+    if (contentReady) Qt.callLater(function() {
+      if (root.contentReady) root.revealed = true
+    })
+  }
+  // A scale Hyprland has not reported yet must not keep the panel away.
+  Timer {
+    interval: 250
+    running: root.visible && root.backingWindowVisible && !root.revealed
+    onTriggered: root.revealed = true
+  }
+  onRevealedChanged: if (revealed && open) startOpen(false)
+
+  Binding {
+    target: root.contentItem
+    property: "opacity"
+    value: root.revealed ? 1 : 0
+  }
+
+  property bool focusPrimed: false
+  function beginFocusPrime() {
+    if (open && backingWindowVisible) focusPrimeTimer.restart()
+  }
+  onBackingWindowVisibleChanged: beginFocusPrime()
+
+  Timer {
+    id: focusPrimeTimer
+    interval: 75
+    onTriggered: if (root.open) root.focusPrimed = true
+  }
+
+  onOpenChanged: {
+    if (open) {
+      if (content) contentRequested = true
+      Hyprland.refreshMonitors()
+      root.dock = root.holdRail(root.screenName)
+      focusPrimed = false
+      beginFocusPrime()
+      // Opened again while folding: straight back out from where it is.
+      if (revealed) startOpen(folding)
+      folding = false
+      if (focusTarget) Qt.callLater(function() {
+        if (root.open && root.focusTarget) root.focusTarget.forceActiveFocus()
+      })
+      return
+    }
+    focusPrimeTimer.stop()
+    focusPrimed = false
+    settled = false
+    slideMotion.stop()
+    popMotion.stop()
+    if (revealed && PanaceaLook.animMs > 0) {
+      folding = true
+      if (docked) foldMotion.start()
+      else fadeMotion.start()
+    } else {
+      finishClose()
+    }
+  }
+
+  function startOpen(fromHere) {
+    foldMotion.stop()
+    fadeMotion.stop()
+    settled = false
+    if (!fromHere) cardTop = Math.round((screenH - contentHeight) / 2)
+    if (PanaceaLook.animMs <= 0) {
+      dockSlide.x = 0; card.opacity = 1; card.scale = 1; scrimFill.opacity = 1
+      settled = true
+    } else if (docked) {
+      card.opacity = 1; card.scale = 1
+      if (!fromHere) { dockSlide.x = tuckedX; scrimFill.opacity = 0 }
+      slideMotion.start()
+    } else {
+      dockSlide.x = 0
+      if (!fromHere) { card.opacity = 0; card.scale = 0.965 }
+      popMotion.start()
+    }
+  }
+
+  function finishClose() {
+    folding = false
+    if (open) return
+    root.holdRail("")
+  }
+
+  Component.onDestruction: if (open || folding) holdRail("")
+
+  // --- motion --------------------------------------------------------------
+
+  // Render-thread animators, so a busy frame cannot skip them.
+  readonly property real tuckedX: -(card.width + flare + overlap + 8)
+
+  ParallelAnimation {
+    id: slideMotion
+    OpacityAnimator { target: scrimFill; to: 1; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }
+    SequentialAnimation {
+      // The rail first, when it was hidden.
+      PauseAnimation { duration: Math.round(Number(root.dock.railMs || 0) * 0.6) }
+      XAnimator { target: dockSlide; to: 0; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }
+    }
+    onFinished: root.settled = true
+  }
+
+  ParallelAnimation {
+    id: popMotion
+    OpacityAnimator { target: card; to: 1; duration: PanaceaLook.animFast + 40; easing.type: Easing.OutCubic }
+    ScaleAnimator { target: card; to: 1; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }
+    onFinished: root.settled = true
+  }
+
+  ParallelAnimation {
+    id: foldMotion
+    XAnimator { target: dockSlide; to: root.tuckedX; duration: PanaceaLook.animFast + 40; easing.type: Easing.InCubic }
+    OpacityAnimator { target: scrimFill; to: 0; duration: PanaceaLook.animFast + 40; easing.type: Easing.InCubic }
+    onFinished: root.finishClose()
+  }
+
+  ParallelAnimation {
+    id: fadeMotion
+    OpacityAnimator { target: card; to: 0; duration: PanaceaLook.animFast; easing.type: Easing.InCubic }
+    onFinished: root.finishClose()
+  }
+
+  // --- the dim and outside clicks ------------------------------------------
+
+  // Out of the rail, the dim leaves the rail's column alone, so the rail, its
+  // flares and the card read as one shape over the windows.
+  Rectangle {
+    id: scrimFill
+    anchors.fill: parent
+    anchors.leftMargin: root.attachX
+    visible: root.docked
+    color: PanaceaLook.scrim
+    opacity: 0
+  }
+
+  MouseArea {
+    anchors.fill: parent
+    enabled: root.open
+    acceptedButtons: Qt.AllButtons
+    onClicked: root.close()
+  }
+
+  // The window spans one output; a twin on every other one catches the click
+  // that closes the panel there (KeyboardPanel does the same).
+  Variants {
+    model: root.open ? Quickshell.screens : []
+
+    delegate: Component {
+      PanelWindow {
+        required property var modelData
+
+        screen: modelData
+        visible: root.open && !!root.screen && modelData.name !== root.screen.name
+        color: "transparent"
+        exclusionMode: ExclusionMode.Ignore
+
+        WlrLayershell.namespace: "omarchy-keyboard-panel-dismiss"
+        WlrLayershell.layer: WlrLayer.Overlay
+        WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
+
+        anchors {
+          top: true
+          bottom: true
+          left: true
+          right: true
+        }
+
+        MouseArea {
+          anchors.fill: parent
+          acceptedButtons: Qt.AllButtons
+          onPressed: root.close()
+        }
+      }
+    }
+  }
+
+  // --- the card ------------------------------------------------------------
+
+  // Out of the rail, the card and its flares sit in dockSlide, which moves
+  // as one, inside dockClip, which starts at the rail's edge: the card comes
+  // out from behind the rail, never across it.
+  Item {
+    id: dockClip
+    x: root.docked ? root.attachX - root.overlap : 0
+    width: root.width - x
+    height: root.height
+    clip: root.docked
+
+    Item {
+      id: dockSlide
+      width: parent.width
+      height: parent.height
+
+      PanaceaFillet {
+        visible: root.docked && root.flare > 0
+        radius: root.flare
+        overlap: root.overlap
+        color: card.color
+        y: card.y - height
+      }
+
+      PanaceaFillet {
+        visible: root.docked && root.flare > 0
+        below: true
+        radius: root.flare
+        overlap: root.overlap
+        color: card.color
+        y: card.y + card.height
+      }
+
+      Rectangle {
+        id: card
+        width: root.contentWidth + (root.docked ? root.overlap : 0)
+        height: root.contentHeight
+        x: root.docked ? 0 : Math.round(dockSlide.width - root.margin - width)
+        y: root.docked
+          ? Math.max(root.margin, Math.min(root.cardTop >= 0 ? root.cardTop : 0, root.screenH - root.margin - height))
+          : root.margin
+        color: PanaceaLook.bg
+        radius: PanaceaLook.modalRadius
+        // Out of the rail its rail side is square and the flares round it
+        // into the rail; on its own, all four corners are round.
+        topLeftRadius: root.docked ? 0 : radius
+        bottomLeftRadius: root.docked ? 0 : radius
+        border.width: root.docked ? 0 : 1
+        border.color: PanaceaLook.line
+        clip: true
+        opacity: 0
+
+        Behavior on height {
+          enabled: root.settled
+          NumberAnimation { duration: PanaceaLook.animMs; easing.type: Easing.InOutCubic }
+        }
+        Behavior on y {
+          enabled: root.settled
+          NumberAnimation { duration: PanaceaLook.animMs; easing.type: Easing.InOutCubic }
+        }
+
+        // Clicks on the card stay on the card.
+        MouseArea {
+          anchors.fill: parent
+          acceptedButtons: Qt.AllButtons
+        }
+
+        Item {
+          id: contentHolder
+          anchors.fill: parent
+          anchors.margins: root.padding
+          anchors.leftMargin: root.padding + (root.docked ? root.overlap : 0)
+          // Right-to-left languages read the card mirrored; the card itself
+          // stays where the rail puts it.
+          LayoutMirroring.enabled: Commons.I18n.rightToLeft
+          LayoutMirroring.childrenInherit: true
+
+          Loader {
+            id: contentLoader
+            anchors.fill: parent
+            focus: true
+            active: !!root.content && (root.open || root.contentRequested)
+            sourceComponent: root.content
+          }
+        }
+      }
+    }
+  }
+}

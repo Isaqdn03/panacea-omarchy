@@ -249,7 +249,7 @@ Item {
 
   // panacea: the menu grows out of Panacea's rail, as every surface grows
   // out of the island. Opening on a screen asks Panacea to keep its rail out
-  // (`pill hold`), and its answer says where the card attaches: the rail's
+  // (`pill holdFor`), and its answer says where the card attaches: the rail's
   // edge on the rail's screen, the screen's own edge on the others. Without
   // Panacea, or off the rail, the card opens centred, on its own.
   property var dock: ({})  // panacea
@@ -258,7 +258,7 @@ Item {
   readonly property real dockFlare: Number(dock.flare || 0)  // panacea
   readonly property int dockOverlap: 2  // panacea: into the rail, so no seam shows
   function dockAt(screen) {  // panacea
-    var answer = IpcRegistry.call("pill", "hold", [screen ? String(screen.name || "") : ""])  // panacea
+    var answer = IpcRegistry.call("pill", "holdFor", ["menu", screen ? String(screen.name || "") : ""])  // panacea
     if (!screen) return  // panacea: the window is going; keep its shape until it has
     var parsed = ({})  // panacea
     try { if (answer.ran && answer.output) parsed = JSON.parse(answer.output) } catch (e) { parsed = ({}) }  // panacea
@@ -1666,9 +1666,13 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
 
             Controls.ScrollBar.vertical: Controls.ScrollBar {  // panacea: Panacea's thin scrollbar
+              id: rowsBar  // panacea
               policy: Controls.ScrollBar.AsNeeded  // panacea
               width: 3  // panacea
-              contentItem: Rectangle { radius: 2; color: PanaceaLook.scrollThumb }  // panacea
+              padding: 0  // panacea: the style pads 2 px a side, which left a 3 px bar no room for its thumb
+              // panacea: shown while the rows overflow, as Panacea's lists do (the
+              // style's fade-in never fires for the wheel)
+              contentItem: Rectangle { radius: 2; color: PanaceaLook.scrollThumb; opacity: rowsBar.size < 1 ? 1 : 0 }  // panacea
             }  // panacea
 
             WheelHandler {

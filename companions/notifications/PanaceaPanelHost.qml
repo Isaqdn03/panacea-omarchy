@@ -6,11 +6,12 @@ import qs.Commons
 // Hosts the notification panel when Panacea is the bar. Omarchy's stock bar
 // hosts it in its do-not-disturb indicator (bar/indicators/Dnd.qml), which
 // Panacea's rail does not have, so `omarchy-shell notifications openPanel`
-// and togglePanel found no one to answer. Here an invisible anchor sits in
-// the top-right corner of every monitor, where the toasts are, and the one
-// on the requested monitor builds the panel the first time, as Dnd.qml does.
-// The panel is a KeyboardPanel, which reads a few things from the bar it
-// hangs from; `barFacade` answers them.
+// and togglePanel found no one to answer. Here every monitor gets an
+// invisible one-pixel anchor, and the one on the requested monitor builds the
+// panel the first time, as Dnd.qml does. The panel is Panacea's island
+// (PanaceaIsland.qml), which takes its monitor from the anchor's window and
+// works out where to open by asking Panacea, so the anchor's place does not
+// matter.
 Item {
   id: host
 
@@ -26,15 +27,11 @@ Item {
       readonly property string screenName: modelData ? String(modelData.name || "") : ""
 
       screen: modelData
-      // KeyboardPanel puts its card below the anchor window's height, and
-      // reads the anchor's x inside that window as its x on screen (true of a
-      // full-width bar). So: full width, one pixel tall, the anchor at the
-      // right end; the panel opens at the top right, beside the toasts.
       anchors {
         top: true
         left: true
-        right: true
       }
+      implicitWidth: 1
       implicitHeight: 1
       exclusionMode: ExclusionMode.Ignore
       color: "transparent"
@@ -45,29 +42,8 @@ Item {
 
       Item {
         id: anchor
-        anchors.right: parent.right
-        width: 2
+        width: 1
         height: 1
-      }
-
-      QtObject {
-        id: barFacade
-        readonly property string position: "top"
-        readonly property int barSize: 1
-        readonly property string fontFamily: PanaceaLook.font
-        property var activePopout: null
-        readonly property var clickTargets: []
-        function requestPopout(owner) {
-          if (activePopout === owner) return
-          if (activePopout && "close" in activePopout) activePopout.close()
-          activePopout = owner
-        }
-        function releasePopout(owner) {
-          if (activePopout === owner) activePopout = null
-        }
-        function targetBelongsToWindow(target, window) {
-          return !!target && !!window && !!target.QsWindow && target.QsWindow.window === window
-        }
       }
 
       Connections {
@@ -76,7 +52,7 @@ Item {
           if (screenName && screenName !== anchorWindow.screenName) return
           if (!panelLoader.item) {
             panelLoader.setSource(host.service.panelUrl,
-                                  { anchorItem: anchor, bar: barFacade, service: host.service })
+                                  { anchorItem: anchor, service: host.service })
           }
           var panel = panelLoader.item
           if (!panel) return

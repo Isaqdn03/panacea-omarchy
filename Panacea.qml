@@ -3822,25 +3822,31 @@ PanelWindow {
             return JSON.stringify({
                 bg: String(root.colBg), fg: String(root.colFg), muted: String(root.colMuted),
                 line: String(root.colLine), hover: String(root.colHover), on: String(root.colOn),
-                crit: String(root.colCrit), fontFam: root.fontFam, fontSize: root.fontSize,
-                iconSize: root.iconSize, animMs: root.animMs
+                crit: String(root.colCrit), fontFam: root.fontFam, fontBody: root.fontBody,
+                fontSize: root.fontSize, iconSize: root.iconSize, animMs: root.animMs,
+                animFade: root.animFade, animHover: root.animHover
             });
         }
         // A companion's surface grows out of the rail (Omarchy's menu and
-        // pickers: companions/menu). `hold <screen>` as it opens on that
-        // screen keeps the rail out, and folds the drawer away so there is
-        // one surface at a time; `hold ""` once it has folded back lets the
-        // rail hide again. The answer says where the surface attaches: x is
-        // the rail's edge on its own screen, 0 where the rail is not shown
-        // (another monitor, a fullscreen window), so it meets the screen
-        // edge there. attach is false off the rail or out of notch mode, and
-        // the surface then opens as a card of its own.
-        function hold(screen: string): string {
+        // pickers: companions/menu; the notification panel:
+        // companions/notifications). `holdFor <who> <screen>` as it opens on
+        // that screen keeps the rail out, and folds the drawer away so there
+        // is one surface at a time; `holdFor <who> ""` once it has folded back
+        // lets the rail hide again, unless another surface still holds it.
+        // The answer says where the surface attaches: x is the rail's edge on
+        // its own screen, 0 where the rail is not shown (another monitor, a
+        // fullscreen window), so it meets the screen edge there. attach is
+        // false off the rail or out of notch mode, and the surface then opens
+        // as a card of its own.
+        function holdFor(who: string, screen: string): string {
             var here = !!root.screen && screen === root.screen.name;
             var shown = here && root.railMode && !root.fullscreenActive;
             // railMs: how long the rail takes to slide out, when it was hidden
             var wasHidden = root.pillHidden;
-            root.railHeld = shown;
+            var holders = Object.assign({}, root.railHolders);
+            if (shown) holders[who] = true;
+            else delete holders[who];
+            root.railHolders = holders;
             if (shown && root.expanded) root.collapse();
             return JSON.stringify({
                 attach: root.railMode && root.cfg.notchMode,
@@ -3848,6 +3854,8 @@ PanelWindow {
                 railMs: shown && wasHidden ? Math.round(root.animMs * 0.65) : 0
             });
         }
+        // The menu's call from before there were two holders.
+        function hold(screen: string): string { return holdFor("menu", screen); }
         // индикатор голосового ввода: зовёт voxtype.sh на разных этапах
         function voxListening(): void {
             root.voxState = "listening";
@@ -4118,9 +4126,10 @@ PanelWindow {
                                        && !capsuleHover.hovered
                                        && !root.railHeld
     property bool pillPeek: false
-    // A companion's surface is out of the rail (`pill hold`): the rail stays
-    // on screen until it folds back.
-    property bool railHeld: false
+    // A companion's surface is out of the rail (`pill holdFor`): the rail
+    // stays on screen until every one of them has folded back.
+    property var railHolders: ({})
+    readonly property bool railHeld: Object.keys(railHolders).length > 0
     function peekPill() {
         if (root.pillPeek) { root.pillPeek = false; peekTimer.stop(); return; }
         root.pillPeek = true;
