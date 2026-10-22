@@ -17,8 +17,8 @@ ColumnLayout {
     SetCard {
         sys: page.sys
 
-        // PANACEA-LOCAL: the full-height left rail, or the island at the top
-        // edge. Picking one closes Settings, then the bar changes shape.
+        // PANACEA-LOCAL: the rail along its whole edge, or the island.
+        // Picking one closes Settings, then the bar changes shape.
         SetSelect {
             sys: page.sys
             label: "Layout"
@@ -26,7 +26,7 @@ ColumnLayout {
                 { id: "rail", text: "Rail" },
                 { id: "pill", text: "Pill" }
             ]
-            value: page.sys.railMode ? "rail" : "pill"
+            value: page.sys.barShape
             onPicked: id => page.sys.setLayout(id)
         }
 
@@ -44,14 +44,6 @@ ColumnLayout {
             sub: page.sys.tr("Остров уезжает за кромку и не занимает место под себя: окна получают весь экран. Возвращается наведением на край.")
             on: page.sys.cfg.pillAutoHide
             onToggled: value => { page.sys.cfg.pillAutoHide = value; page.sys.saveCfg(); }
-        }
-
-        SetToggle {
-            sys: page.sys
-            label: page.sys.tr("Режим оверлея (Floating)")
-            sub: page.sys.tr("Остров парит поверх окон без резервирования верхней строки: окна приложений не сжимаются и не прыгают при открытии или скрытии.")
-            on: page.sys.cfg.pillOverlay
-            onToggled: value => { page.sys.cfg.pillOverlay = value; page.sys.saveCfg(); }
         }
 
         SetToggle {
