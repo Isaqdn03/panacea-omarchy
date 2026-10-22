@@ -3826,6 +3826,28 @@ PanelWindow {
                 iconSize: root.iconSize, animMs: root.animMs
             });
         }
+        // A companion's surface grows out of the rail (Omarchy's menu and
+        // pickers: companions/menu). `hold <screen>` as it opens on that
+        // screen keeps the rail out, and folds the drawer away so there is
+        // one surface at a time; `hold ""` once it has folded back lets the
+        // rail hide again. The answer says where the surface attaches: x is
+        // the rail's edge on its own screen, 0 where the rail is not shown
+        // (another monitor, a fullscreen window), so it meets the screen
+        // edge there. attach is false off the rail or out of notch mode, and
+        // the surface then opens as a card of its own.
+        function hold(screen: string): string {
+            var here = !!root.screen && screen === root.screen.name;
+            var shown = here && root.railMode && !root.fullscreenActive;
+            // railMs: how long the rail takes to slide out, when it was hidden
+            var wasHidden = root.pillHidden;
+            root.railHeld = shown;
+            if (shown && root.expanded) root.collapse();
+            return JSON.stringify({
+                attach: root.railMode && root.cfg.notchMode,
+                edge: root.pillPos, x: shown ? root.railW : 0, flare: root.cornerR,
+                railMs: shown && wasHidden ? Math.round(root.animMs * 0.65) : 0
+            });
+        }
         // индикатор голосового ввода: зовёт voxtype.sh на разных этапах
         function voxListening(): void {
             root.voxState = "listening";
@@ -4094,7 +4116,11 @@ PanelWindow {
                                        && !root.recActive
                                        && !root.pillPeek && !root.edgeReveal
                                        && !capsuleHover.hovered
+                                       && !root.railHeld
     property bool pillPeek: false
+    // A companion's surface is out of the rail (`pill hold`): the rail stays
+    // on screen until it folds back.
+    property bool railHeld: false
     function peekPill() {
         if (root.pillPeek) { root.pillPeek = false; peekTimer.stop(); return; }
         root.pillPeek = true;

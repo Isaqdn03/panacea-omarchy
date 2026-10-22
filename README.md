@@ -124,7 +124,7 @@ plugin's calls to the companion. Omarchy keeps the service; Panacea draws it.
 | --- | --- | --- |
 | `isaqdn.panacea-osd` | `omarchy.osd` | Sends the volume, brightness and media pop-ups to Panacea's rail |
 | `isaqdn.panacea-notifications` | `omarchy.notifications` | Omarchy's notifications, drawn in Panacea's look; hosts the notification panel at the top right |
-| `isaqdn.panacea-menu` | `omarchy.menu` | Omarchy's menu and its pickers (`omarchy menu`, `omarchy-menu-select`, `omarchy-menu-input`), drawn as Panacea's launcher in Panacea's modal card |
+| `isaqdn.panacea-menu` | `omarchy.menu` | Omarchy's menu and its pickers (`omarchy menu`, `omarchy-menu-select`, `omarchy-menu-input`), drawn as Panacea's launcher; they slide out of the rail and fold back into it (`pill hold`), or open as a card of their own when Panacea is not a rail |
 
 Each one lives in `companions/<name>/` and is installed as its own plugin folder
 by `scripts/companions.sh install`: Omarchy only loads plugins at the top level

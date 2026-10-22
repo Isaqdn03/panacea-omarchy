@@ -247,6 +247,24 @@ Item {
     return root.items[id] || null
   }
 
+  // panacea: the menu grows out of Panacea's rail, as every surface grows
+  // out of the island. Opening on a screen asks Panacea to keep its rail out
+  // (`pill hold`), and its answer says where the card attaches: the rail's
+  // edge on the rail's screen, the screen's own edge on the others. Without
+  // Panacea, or off the rail, the card opens centred, on its own.
+  property var dock: ({})  // panacea
+  readonly property bool docked: dock.attach === true  // panacea
+  readonly property real attachX: Number(dock.x || 0)  // panacea
+  readonly property real dockFlare: Number(dock.flare || 0)  // panacea
+  readonly property int dockOverlap: 2  // panacea: into the rail, so no seam shows
+  function dockAt(screen) {  // panacea
+    var answer = IpcRegistry.call("pill", "hold", [screen ? String(screen.name || "") : ""])  // panacea
+    if (!screen) return  // panacea: the window is going; keep its shape until it has
+    var parsed = ({})  // panacea
+    try { if (answer.ran && answer.output) parsed = JSON.parse(answer.output) } catch (e) { parsed = ({}) }  // panacea
+    root.dock = parsed  // panacea
+  }  // panacea
+
   // panacea: when any row shows an icon, every label starts in the icon
   // column's shadow, so a row without one (the fonts not in use, a picker's
   // plain option) does not stick out to the left.
@@ -1275,7 +1293,15 @@ Item {
   }
   OverlayWindow {
     id: panel
-    shown: root.opened && root.rowsLoaded
+    // panacea: showOpen mirrors root.opened, set by the handler below once it
+    // has decided whether the card folds back first: bound to root.opened
+    // itself, the window went the moment the menu closed, before the fold
+    // could hold it.
+    property bool showOpen: false  // panacea
+    shown: (showOpen && root.rowsLoaded) || folding  // panacea: stays while it folds back
+    // panacea: the keyboard goes back to the windows the moment the menu
+    // closes, not once it has folded away
+    shownKeyboardFocus: folding ? WlrKeyboardFocus.None : WlrKeyboardFocus.Exclusive  // panacea
     WlrLayershell.namespace: "omarchy-menu"
 
     // The card opens centered exactly as always. The first search keystroke
@@ -1295,29 +1321,78 @@ Item {
       }
     }
     onShownChanged: if (!shown) { cardTop = -1; maxRowsHeight = -1 }
-    onTargetScreenChanged: { cardTop = -1; maxRowsHeight = -1 }
+    onTargetScreenChanged: { cardTop = -1; maxRowsHeight = -1; root.dockAt(targetScreen) }  // panacea: dockAt
 
-    // panacea: Panacea's modal opening. The window shows its content once
-    // the output's scale is known (contentRevealed); from there the scrim and
-    // the card fade in and the card grows from 96.5%, on render-thread
-    // animators so a busy first frame cannot skip them. Every open starts
-    // from nothing: the window is gone the moment the menu closes, so there
-    // is no fade out to wait for.
+    // panacea: the opening. The window shows its content once the output's
+    // scale is known (contentRevealed). Out of the rail (root.docked), the
+    // card slides out from behind the rail's edge, once the rail itself is
+    // most of the way out; on its own, it fades in over the scrim and grows
+    // from 96.5%, as Panacea's modal does. Render-thread animators, so a
+    // busy first frame cannot skip them, and every open starts from nothing.
     ParallelAnimation {  // panacea
       id: openMotion  // panacea
       OpacityAnimator { target: scrimFill; from: 0; to: 1; duration: PanaceaLook.animFast; easing.type: Easing.OutCubic }  // panacea
       OpacityAnimator { target: card; from: 0; to: 1; duration: PanaceaLook.animFast + 40; easing.type: Easing.OutCubic }  // panacea
       ScaleAnimator { target: card; from: 0.965; to: 1; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }  // panacea
     }  // panacea
+    readonly property real tuckedX: -(card.width + root.dockFlare + root.dockOverlap + 8)  // panacea: behind the rail
+    ParallelAnimation {  // panacea
+      id: slideMotion  // panacea
+      OpacityAnimator { target: scrimFill; from: 0; to: 1; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }  // panacea
+      SequentialAnimation {  // panacea
+        PauseAnimation { duration: Math.round(Number(root.dock.railMs || 0) * 0.6) }  // panacea: the rail first
+        XAnimator { target: dockSlide; to: 0; duration: PanaceaLook.animMs; easing.type: Easing.OutCubic }  // panacea
+      }  // panacea
+    }  // panacea
     onContentRevealedChanged: {  // panacea
       openMotion.stop()  // panacea
-      if (contentRevealed) openMotion.start()  // panacea
-      else { scrimFill.opacity = 0; card.opacity = 0; card.scale = 0.965 }  // panacea
+      slideMotion.stop()  // panacea
+      foldMotion.stop()  // panacea
+      if (contentRevealed && root.docked) {  // panacea
+        scrimFill.opacity = 0; card.opacity = 1; card.scale = 1  // panacea
+        dockSlide.x = panel.tuckedX  // panacea
+        slideMotion.start()  // panacea
+      } else if (contentRevealed) {  // panacea
+        dockSlide.x = 0  // panacea
+        openMotion.start()  // panacea
+      } else { scrimFill.opacity = 0; card.opacity = 0; card.scale = 0.965; dockSlide.x = 0 }  // panacea
+    }  // panacea
+
+    // panacea: closing folds the card back into the rail and lifts the dim;
+    // the window goes once it has (folding holds `shown`). Opening again
+    // meanwhile slides it straight back out.
+    property bool folding: false  // panacea
+    ParallelAnimation {  // panacea
+      id: foldMotion  // panacea
+      XAnimator { target: dockSlide; to: panel.tuckedX; duration: PanaceaLook.animFast + 40; easing.type: Easing.InCubic }  // panacea
+      OpacityAnimator { target: scrimFill; to: 0; duration: PanaceaLook.animFast + 40; easing.type: Easing.InCubic }  // panacea
+      onFinished: panel.folding = false  // panacea
+    }  // panacea
+    Connections {  // panacea
+      target: root  // panacea
+      function onOpenedChanged() {  // panacea
+        if (root.opened) {  // panacea
+          if (panel.folding) {  // panacea
+            foldMotion.stop(); panel.folding = false  // panacea
+            slideMotion.stop(); dockSlide.x = panel.tuckedX; slideMotion.start()  // panacea
+          }  // panacea
+          panel.showOpen = true  // panacea
+          return  // panacea
+        }  // panacea
+        if (root.docked && panel.contentRevealed && PanaceaLook.animMs > 0) {  // panacea
+          slideMotion.stop(); panel.folding = true; foldMotion.start()  // panacea
+        }  // panacea
+        panel.showOpen = false  // panacea
+      }  // panacea
     }  // panacea
 
     Rectangle {
       id: scrimFill  // panacea
       anchors.fill: parent
+      // panacea: out of the rail, the dim leaves the rail's column alone, so
+      // the rail, its flares and the card read as one shape over the windows
+      // (the card is the terminals' colour and would melt into one behind it).
+      anchors.leftMargin: root.docked ? root.attachX : 0  // panacea
       color: root.scrim
       opacity: 0  // panacea: openMotion fades it in
     }
@@ -1327,16 +1402,56 @@ Item {
       onClicked: root.cancel()
     }
 
+    // panacea: out of the rail, the card and its flares sit in dockSlide,
+    // which moves as one, inside dockClip, which starts at the rail's edge:
+    // the card comes out from behind the rail, never across it.
+    Item {  // panacea
+      id: dockClip  // panacea
+      x: root.docked ? root.attachX - root.dockOverlap : 0  // panacea
+      width: panel.width - x  // panacea
+      height: panel.height  // panacea
+      clip: root.docked  // panacea
+
+      Item {  // panacea
+        id: dockSlide  // panacea
+        width: parent.width  // panacea
+        height: parent.height  // panacea
+
+        PanaceaFillet {  // panacea: where the card's top meets the rail
+          visible: root.docked && root.dockFlare > 0  // panacea
+          radius: root.dockFlare  // panacea
+          overlap: root.dockOverlap  // panacea
+          color: root.background  // panacea
+          y: card.y - height  // panacea
+        }  // panacea
+
+        PanaceaFillet {  // panacea: where its bottom does
+          visible: root.docked && root.dockFlare > 0  // panacea
+          below: true  // panacea
+          radius: root.dockFlare  // panacea
+          overlap: root.dockOverlap  // panacea
+          color: root.background  // panacea
+          y: card.y + card.height  // panacea
+        }  // panacea
+      }  // panacea
+    }  // panacea
+
     BorderSurface {
       id: card
-      width: root.cardWidth
+      parent: dockSlide  // panacea: moves with its flares
+      width: root.cardWidth + (root.docked ? root.dockOverlap : 0)  // panacea: the part under the rail's edge
       height: Math.min(root.cardHeight, panel.height - Style.gapsOut - panel.effectiveCardTop)
       radius: PanaceaLook.modalRadius  // panacea
-      anchors.horizontalCenter: parent.horizontalCenter
+      // panacea: out of the rail, its rail side is square and the flares
+      // round it into the rail; on its own, all four corners are round.
+      topLeftRadius: root.docked ? 0 : radius  // panacea
+      bottomLeftRadius: root.docked ? 0 : radius  // panacea
+      x: root.docked ? 0 : Math.round((parent.width - width) / 2)  // panacea: against the rail, or centred
       y: panel.effectiveCardTop
       color: root.background
-      borderSpec: root.borderSpec
+      borderSpec: root.docked ? Border.none() : root.borderSpec  // panacea: one shape with the rail, no outline
       padding: root.contentMargin
+      leftPadding: root.contentMargin + (root.docked ? root.dockOverlap : 0)  // panacea
       // panacea: openMotion fades and scales it in. Moving between menus
       // resizes it smoothly, as Panacea's modal does between sections; the
       // first layout snaps.

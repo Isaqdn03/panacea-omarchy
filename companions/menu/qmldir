@@ -3,3 +3,4 @@
 # The entry points (Menu.qml, BarWidget.qml) load by path and stay out:
 # BarWidget.qml's root is qs.Ui's BarWidget, which a local one would shadow.
 singleton PanaceaLook 1.0 PanaceaLook.qml
+PanaceaFillet 1.0 PanaceaFillet.qml
