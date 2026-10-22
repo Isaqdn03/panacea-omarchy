@@ -61,11 +61,15 @@ PanelWindow {
     // ------------------------------------------------- сохраняемые настройки
     // Живут в ~/.config/panacea/settings.json и правятся по Super+I.
     // Файл читается на старте и перечитывается при внешнем изменении.
+    // Settings arrive after startup; until then cfg holds the defaults.
+    property bool cfgReady: false
     FileView {
         id: cfgFile
         path: Quickshell.env("HOME") + "/.config/panacea/settings.json"
         watchChanges: true
         onFileChanged: reload()
+        onLoaded: root.cfgReady = true
+        onLoadFailed: root.cfgReady = true
         adapter: JsonAdapter {
             property string fontFam: "JetBrainsMono Nerd Font"
             property int    fontSize: 15
@@ -134,6 +138,11 @@ PanelWindow {
             property int    animBounce: 79     // перелёт осциллятора, %
 
             // ---------------------------------------------- Notifications
+            // "panacea": Panacea's own notification server and toasts.
+            // "omarchy": Omarchy's notifications (grouped stacks, actions and
+            // replies, snooze, codes), run by the isaqdn.panacea-notifications
+            // companion; Panacea's server and IPC stand down.
+            property string notifEngine: "panacea"
             property bool   notifDnd: false
             property int    notifTimeout: 5000       // обычные, мс
             property int    notifCritTimeout: 0      // 0 — висят до ответа
@@ -233,7 +242,7 @@ PanelWindow {
         reduceMotion: false, animMove: 230, animFade: 200, animHover: 150, animBounce: 0,
         clock12: false, clockSeconds: false, clockWeekday: true,
         clockTz: "auto", clockDateFmt: "d MMMM",
-        notifDnd: false, notifTimeout: 5000, notifCritTimeout: 0, notifPreview: true,
+        notifEngine: "panacea", notifDnd: false, notifTimeout: 5000, notifCritTimeout: 0, notifPreview: true,
         ccLayout: "", filesWindow: false, filesHidden: true, filesMode: "list",
         vaultCapture: true,
         vibrance: 50,
@@ -1451,6 +1460,13 @@ PanelWindow {
         if (!pageEnabled(name)) return;   // выключено установщиком — молчим
         // проводник в оконном режиме пилюлю не трогает вовсе
         if (name === "files" && cfg.filesWindow) { openFilesWindow(); return; }
+        // With Omarchy's notifications, their own panel is the history (the
+        // isaqdn.panacea-notifications companion hosts it, top right).
+        if (name === "notif" && omarchyNotifs) {
+            if (expanded) collapse();
+            IpcRegistry.call("notifications", "togglePanel", []);
+            return;
+        }
         if (expanded && page === name) { collapse(); return; }
         pageResetTimer.stop();
         page = name;
@@ -2252,9 +2268,24 @@ PanelWindow {
     // keys (SUPER + , and friends), its menu's silencing toggle and
     // `omarchy notification ...` all reach this server. Omarchy's own hints
     // are honoured: omarchy-glyph (icon) and omarchy-exec-argv (click action).
-    readonly property bool dnd: cfg.notifDnd
-    function setDnd(on) { cfg.notifDnd = on === true; root.saveCfg(); }
-    function toggleDnd() { root.setDnd(!cfg.notifDnd); }
+    //
+    // With cfg.notifEngine "omarchy", none of that runs: Omarchy's own
+    // notifications do, in the isaqdn.panacea-notifications companion, which
+    // answers the IPC instead, and do-not-disturb is that service's.
+    readonly property bool omarchyNotifs: cfg.notifEngine === "omarchy"
+    readonly property var omarchyNotifService: omarchyNotifs && host.shell
+        ? host.shell.firstPartyServiceFor("omarchy.notifications") : null
+    readonly property bool dnd: omarchyNotifs
+        ? (omarchyNotifService ? omarchyNotifService.doNotDisturb : false) : cfg.notifDnd
+    function setDnd(on) {
+        if (omarchyNotifs) {
+            if (omarchyNotifService) omarchyNotifService.setDoNotDisturb(on === true);
+            return;
+        }
+        cfg.notifDnd = on === true;
+        root.saveCfg();
+    }
+    function toggleDnd() { root.setDnd(!root.dnd); }
     property var  notifCurrent: null         // то, что показывается сейчас
     ListModel { id: notifModel }             // история
     readonly property var notifications: notifModel
@@ -2262,7 +2293,10 @@ PanelWindow {
     property var notifServer: notifLoader.item
     Loader {
         id: notifLoader
-        active: true
+        // One notification server per session: Omarchy's runs instead. Not
+        // before the settings are in, or the default would grab the bus
+        // name from Omarchy's for a moment at every start.
+        active: root.cfgReady && !root.omarchyNotifs
         sourceComponent: notifServerComp
     }
 
@@ -2554,6 +2588,9 @@ PanelWindow {
     // stay in the history (the Notifications page) when dismissed.
     ShellIpc {
         target: "notifications"
+        // Omarchy's notifications answer this target themselves; as with
+        // the server, wait for the settings so the two never both claim it.
+        enabled: root.cfgReady && !root.omarchyNotifs
 
         function dndState(): string { return root.dnd ? "on" : "off"; }
         function toggleDnd(): string { root.toggleDnd(); return dndState(); }
@@ -3778,6 +3815,17 @@ PanelWindow {
         target: "pill"
         // PANACEA-LOCAL: show the auto-hidden pill for a few seconds (SUPER + `)
         function peek(): void { root.peekPill(); }
+        // Panacea's look as it is drawn now, for the companions that redraw
+        // Omarchy's own surfaces (companions/*/PanaceaLook.qml): colours
+        // already resolved from the theme, and the type settings.
+        function look(): string {
+            return JSON.stringify({
+                bg: String(root.colBg), fg: String(root.colFg), muted: String(root.colMuted),
+                line: String(root.colLine), hover: String(root.colHover), on: String(root.colOn),
+                crit: String(root.colCrit), fontFam: root.fontFam, fontSize: root.fontSize,
+                iconSize: root.iconSize
+            });
+        }
         // индикатор голосового ввода: зовёт voxtype.sh на разных этапах
         function voxListening(): void {
             root.voxState = "listening";

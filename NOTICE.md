@@ -35,3 +35,14 @@ See `git log` for the details of each change.
 Files written for this fork: `BackButton.qml`, `SetWindows.qml`,
 `scripts/hyprconf.py`, `scripts/omarchy-idle.sh`, `GithubView.qml`,
 `scripts/github.sh`, `scripts/usage_brief.sh`, `scripts/glass.sh`.
+
+## Omarchy
+
+`companions/notifications/` starts as a copy of Omarchy's notifications plugin
+(`shell/plugins/notifications`, Omarchy 4.5.0rc1), adopted with
+`scripts/companions.sh adopt`. The lines Panacea changes are marked
+`// panacea`; `PanaceaLook.qml` and `qmldir` are Panacea's. `upstream/` keeps
+the Omarchy files each companion was last checked against.
+
+- **Upstream:** <https://github.com/omacom/omarchy>
+- **Licence:** MIT, Copyright (c) David Heinemeier Hansson

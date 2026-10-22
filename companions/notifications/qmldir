@@ -1,0 +1,8 @@
+# Panacea's addition to Omarchy's notifications: with a qmldir present, every
+# type is listed, so none depends on the implicit directory import.
+singleton PanaceaLook 1.0 PanaceaLook.qml
+DeedButton 1.0 DeedButton.qml
+NotificationPanel 1.0 NotificationPanel.qml
+PanaceaPanelHost 1.0 PanaceaPanelHost.qml
+Picker 1.0 Picker.qml
+Toast 1.0 Toast.qml
