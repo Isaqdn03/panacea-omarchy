@@ -1461,10 +1461,11 @@ PanelWindow {
         // проводник в оконном режиме пилюлю не трогает вовсе
         if (name === "files" && cfg.filesWindow) { openFilesWindow(); return; }
         // With Omarchy's notifications, their own panel is the history (the
-        // isaqdn.panacea-notifications companion hosts it, top right).
+        // isaqdn.panacea-notifications companion). It takes the drawer's
+        // place itself (`pill holdFrom`), so the drawer stays until it does.
         if (name === "notif" && omarchyNotifs) {
-            if (expanded) collapse();
-            IpcRegistry.call("notifications", "togglePanel", []);
+            var asked = IpcRegistry.call("notifications", "togglePanel", []);
+            if (!asked.ran && expanded) collapse();
             return;
         }
         if (expanded && page === name) { collapse(); return; }
@@ -3838,24 +3839,17 @@ PanelWindow {
         // fullscreen window), so it meets the screen edge there. attach is
         // false off the rail or out of notch mode, and the surface then opens
         // as a card of its own.
-        function holdFor(who: string, screen: string): string {
-            var here = !!root.screen && screen === root.screen.name;
-            var shown = here && root.railMode && !root.fullscreenActive;
-            // railMs: how long the rail takes to slide out, when it was hidden
-            var wasHidden = root.pillHidden;
-            var holders = Object.assign({}, root.railHolders);
-            if (shown) holders[who] = true;
-            else delete holders[who];
-            root.railHolders = holders;
-            if (shown && root.expanded) root.collapse();
-            return JSON.stringify({
-                attach: root.railMode && root.cfg.notchMode,
-                edge: root.pillPos, x: shown ? root.railW : 0, flare: root.cornerR,
-                railMs: shown && wasHidden ? Math.round(root.animMs * 0.65) : 0
-            });
-        }
+        function holdFor(who: string, screen: string): string { return root.holdRail(who, screen, false); }
+        // holdFor for a surface that can take the drawer's place: when the
+        // drawer is out, it stays, and drawerW in the answer says how wide it
+        // is. The surface opens over it at the drawer's own size and shape,
+        // calls dropDrawer once it covers it, then shrinks to its own size:
+        // one island changing shape instead of the drawer folding into the
+        // rail and the surface sliding back out of it.
+        function holdFrom(who: string, screen: string): string { return root.holdRail(who, screen, true); }
+        function dropDrawer(): void { root.dropDrawer(); }
         // The menu's call from before there were two holders.
-        function hold(screen: string): string { return holdFor("menu", screen); }
+        function hold(screen: string): string { return root.holdRail("menu", screen, false); }
         // индикатор голосового ввода: зовёт voxtype.sh на разных этапах
         function voxListening(): void {
             root.voxState = "listening";
@@ -4130,6 +4124,57 @@ PanelWindow {
     // stays on screen until every one of them has folded back.
     property var railHolders: ({})
     readonly property bool railHeld: Object.keys(railHolders).length > 0
+    // `pill holdFor` / `holdFrom`. A hold for any screen folds the drawer
+    // away, one surface at a time, unless the surface takes its place
+    // (takeOver, from holdFrom); a release ("" screen) leaves it alone.
+    function holdRail(who, screen, takeOver) {
+        var here = !!root.screen && screen === root.screen.name;
+        var shown = here && root.railMode && !root.fullscreenActive;
+        // railMs: how long the rail takes to slide out, when it was hidden
+        var wasHidden = root.pillHidden;
+        var holders = Object.assign({}, root.railHolders);
+        if (shown) holders[who] = true;
+        else delete holders[who];
+        root.railHolders = holders;
+        var handOver = takeOver && shown && root.expanded && root.railFull
+                       && !root.modalMode && !root.cfg.pillKeepVisible;
+        if (handOver) drawerHandover.restart();
+        else if (screen !== "" && root.expanded) root.collapse();
+        return JSON.stringify({
+            attach: root.railMode && root.cfg.notchMode,
+            edge: root.pillPos, x: shown ? root.railW : 0, flare: root.cornerR,
+            railMs: shown && wasHidden ? Math.round(root.animMs * 0.65) : 0,
+            drawerW: handOver ? root.panelW : 0
+        });
+    }
+    // The surface that took the drawer's place covers it now: the drawer
+    // goes at once, with no fold to show through the gaps as the surface
+    // shrinks. Its page is only hidden for now (drawerKeep): destroying the
+    // Control Center blocks the GUI thread for ~100 ms, which the surface's
+    // shrink shares, so that waits until the shrink is over.
+    property bool drawerSnap: false
+    property bool drawerKeep: false
+    function dropDrawer() {
+        if (!drawerHandover.running) return;
+        drawerHandover.stop();
+        root.drawerKeep = true;
+        drawerKeepTimer.restart();
+        root.drawerSnap = true;
+        if (root.expanded) root.collapse();
+        root.drawerSnap = false;
+    }
+    Timer {
+        id: drawerKeepTimer
+        interval: root.animMs + 300
+        onTriggered: root.drawerKeep = false
+    }
+    // A surface that never takes the drawer (it failed to open) must not
+    // leave it standing: fold it the usual way.
+    Timer {
+        id: drawerHandover
+        interval: 600
+        onTriggered: if (root.expanded) root.collapse()
+    }
     function peekPill() {
         if (root.pillPeek) { root.pillPeek = false; peekTimer.stop(); return; }
         root.pillPeek = true;
@@ -4490,6 +4535,8 @@ PanelWindow {
         // проскакивает цель, прежде чем осесть. На нуле перелёта нет и
         // кривая обычная — движение просто останавливается.
         Behavior on width {
+            // dropDrawer: a companion's surface covers the drawer; no fold
+            enabled: !root.drawerSnap
             NumberAnimation {
                 duration: root.animMs
                 easing.type: root.animBounce > 0 ? Easing.OutBack : Easing.InOutCubic
@@ -6466,10 +6513,14 @@ PanelWindow {
                      || (root.railMode ? capsule.width > root.railW + 4
                                        : capsule.height > root.pillH + 4)
                      || (root.cfg.pillKeepVisible && detachedPanel.opacity > 0.005)
-                     || (root.modalMode && modalCard.opacity > 0.005))
+                     || (root.modalMode && modalCard.opacity > 0.005)
+                     || root.drawerKeep)
                     && !root.recPickActive && !root.btToastActive
                     && !root.acToastActive && !root.voxActive
+            // drawerKeep: dropped under a companion's surface, the page is
+            // hidden now and destroyed once that surface has stopped moving
             visible: !root.recPickActive && !root.btToastActive && !root.acToastActive && !root.voxActive
+                     && !(root.drawerKeep && !root.expanded)
             // без этого клавиатура не доходила до содержимого страницы:
             // сам Loader фокуса не имел, и forceActiveFocus() внутри вида
             // ни к чему не приводил

@@ -65,12 +65,28 @@ PanelWindow {
   // scale leave no seam.
   readonly property int overlap: 2
 
+  // holdFrom: when Panacea's drawer is out (opened from its Control Centre,
+  // say), it stays, and drawerW says how wide it is. The card then opens as
+  // the drawer itself, full height and as wide, Panacea drops the drawer
+  // under it, and the card shrinks to its own size: the island changes
+  // shape, rather than folding into the rail and sliding back out.
   function holdRail(name) {
-    var answer = IpcRegistry.call("pill", "holdFor", ["notifications", name])
+    var answer = IpcRegistry.call("pill", "holdFrom", ["notifications", name])
     var parsed = ({})
     try { if (answer.ran && answer.output) parsed = JSON.parse(answer.output) } catch (e) { parsed = ({}) }
     return parsed
   }
+  readonly property bool fromDrawer: docked && Number(dock.drawerW || 0) > attachX
+
+  // morph: 0 = the drawer's shape, 1 = the card's own. Only the opening from
+  // the drawer moves it; it rests at 1.
+  property real morph: 1
+  function mix(from, to) { return from + (to - from) * morph }
+  readonly property real ownWidth: contentWidth + (docked ? overlap : 0)
+  readonly property real drawerWidth: Number(dock.drawerW || 0) - attachX + overlap
+  readonly property real ownY: docked
+    ? Math.max(margin, Math.min(cardTop >= 0 ? cardTop : 0, screenH - margin - contentHeight))
+    : margin
 
   // --- size ----------------------------------------------------------------
 
@@ -192,6 +208,9 @@ PanelWindow {
     settled = false
     slideMotion.stop()
     popMotion.stop()
+    shapeMotion.stop()
+    // Closed before it took the drawer: let it go now all the same.
+    dropDrawer()
     if (revealed && PanaceaLook.animMs > 0) {
       folding = true
       if (docked) foldMotion.start()
@@ -206,9 +225,22 @@ PanelWindow {
     fadeMotion.stop()
     settled = false
     if (!fromHere) cardTop = Math.round((screenH - contentHeight) / 2)
+    morph = 1
+    contentHolder.opacity = 1
     if (PanaceaLook.animMs <= 0) {
       dockSlide.x = 0; card.opacity = 1; card.scale = 1; scrimFill.opacity = 1
       settled = true
+      if (fromDrawer) { drawerPending = true; dropDrawer() }
+    } else if (fromDrawer && !fromHere) {
+      // The drawer's shape, faded in over the drawer so its content
+      // dissolves; then the drawer goes and the card shrinks into its own.
+      // The content starts at 1%, not 0, so its first frame is drawn now,
+      // while nothing moves, rather than halfway through the shrink.
+      dockSlide.x = 0; card.opacity = 0; card.scale = 1; scrimFill.opacity = 0
+      morph = 0
+      contentHolder.opacity = 0.01
+      drawerPending = true
+      shapeMotion.start()
     } else if (docked) {
       card.opacity = 1; card.scale = 1
       if (!fromHere) { dockSlide.x = tuckedX; scrimFill.opacity = 0 }
@@ -228,10 +260,40 @@ PanelWindow {
 
   Component.onDestruction: if (open || folding) holdRail("")
 
+  // The drawer under the card is Panacea's to drop, once the card covers it.
+  property bool drawerPending: false
+  function dropDrawer() {
+    if (!drawerPending) return
+    drawerPending = false
+    IpcRegistry.call("pill", "dropDrawer", [])
+  }
+
   // --- motion --------------------------------------------------------------
 
   // Render-thread animators, so a busy frame cannot skip them.
   readonly property real tuckedX: -(card.width + flare + overlap + 8)
+
+  // From the drawer to the card: the card fades in over the drawer, the
+  // drawer goes, then the shape shrinks, easing out like the slide. The
+  // shrink is geometry, so it runs on the GUI thread, which Panacea shares:
+  // Panacea only hides the drawer's page here and destroys it once the
+  // shrink is over (drawerKeep), or the first frames would stall. The
+  // content comes in over the second half.
+  readonly property int shapeMs: PanaceaLook.animMs + 20
+  SequentialAnimation {
+    id: shapeMotion
+    OpacityAnimator { target: card; from: 0; to: 1; duration: Math.round(PanaceaLook.animFast * 0.6); easing.type: Easing.OutCubic }
+    ScriptAction { script: root.dropDrawer() }
+    ParallelAnimation {
+      NumberAnimation { target: root; property: "morph"; from: 0; to: 1; duration: root.shapeMs; easing.type: Easing.OutCubic }
+      OpacityAnimator { target: scrimFill; to: 1; duration: root.shapeMs; easing.type: Easing.OutCubic }
+      SequentialAnimation {
+        PauseAnimation { duration: Math.round(root.shapeMs * 0.45) }
+        OpacityAnimator { target: contentHolder; to: 1; duration: Math.round(root.shapeMs * 0.55); easing.type: Easing.OutCubic }
+      }
+    }
+    onFinished: root.settled = true
+  }
 
   ParallelAnimation {
     id: slideMotion
@@ -354,18 +416,20 @@ PanelWindow {
 
       Rectangle {
         id: card
-        width: root.contentWidth + (root.docked ? root.overlap : 0)
-        height: root.contentHeight
+        // At rest (morph 1) the card's own size and place; opening from the
+        // drawer, it starts as the drawer: full height, as wide, square.
+        width: root.mix(root.drawerWidth, root.ownWidth)
+        height: root.mix(root.screenH, root.contentHeight)
         x: root.docked ? 0 : Math.round(dockSlide.width - root.margin - width)
-        y: root.docked
-          ? Math.max(root.margin, Math.min(root.cardTop >= 0 ? root.cardTop : 0, root.screenH - root.margin - height))
-          : root.margin
+        y: root.mix(0, root.ownY)
         color: PanaceaLook.bg
         radius: PanaceaLook.modalRadius
         // Out of the rail its rail side is square and the flares round it
         // into the rail; on its own, all four corners are round.
         topLeftRadius: root.docked ? 0 : radius
         bottomLeftRadius: root.docked ? 0 : radius
+        topRightRadius: root.mix(0, radius)
+        bottomRightRadius: root.mix(0, radius)
         border.width: root.docked ? 0 : 1
         border.color: PanaceaLook.line
         clip: true
@@ -388,9 +452,13 @@ PanelWindow {
 
         Item {
           id: contentHolder
-          anchors.fill: parent
-          anchors.margins: root.padding
-          anchors.leftMargin: root.padding + (root.docked ? root.overlap : 0)
+          // The card's own content box, whatever the card's size on the way:
+          // the panel never reflows while the shape moves or the card's
+          // height animates, the card's clip shows what fits.
+          x: root.padding + (root.docked ? root.overlap : 0)
+          y: root.padding
+          width: root.contentWidth - root.padding * 2
+          height: root.contentHeight - root.padding * 2
           // Right-to-left languages read the card mirrored; the card itself
           // stays where the rail puts it.
           LayoutMirroring.enabled: Commons.I18n.rightToLeft
