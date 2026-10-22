@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 
 // Вогнутый угол примыкания к кромке экрана — как у выреза на macOS.
 //
@@ -14,7 +15,12 @@ import QtQuick
 // covered, and the wallpaper showed through between them as a hairline.
 // flip turns it upside down within its own box (for the bottom edge, or
 // below a side pill); shiftY moves it with what it hangs from.
-Canvas {
+//
+// A Shape, drawn as curves straight into the scene, not a Canvas: a Canvas
+// paints into a texture, and once the box was 14 px (17.5 physical) the
+// texture's outer row and column smeared into a faint line along the
+// corner's far sides.
+Shape {
     id: corner
 
     // "left"  — угол слева от пилюли (выемка смотрит влево-вниз)
@@ -29,45 +35,36 @@ Canvas {
     property real shiftY: 0
 
     readonly property real reach: r > 0 ? overlap : 0
+    readonly property bool onLeft: side === "left"
     width: r > 0 ? r + reach : 0
     height: r > 0 ? r + reach : 0
-    x: sqX - (side === "right" ? reach : 0)
+    x: sqX - (onLeft ? 0 : reach)
     y: sqY - (flip ? 0 : reach)
+    visible: r > 0
+    preferredRendererType: Shape.CurveRenderer
     transform: [
         Scale { origin.y: corner.height / 2; yScale: corner.flip ? -1 : 1 },
         Translate { y: corner.shiftY }
     ]
 
-    onFillChanged: requestPaint()
-    onRChanged: requestPaint()
-    onSideChanged: requestPaint()
-    onOverlapChanged: requestPaint()
+    // The box less a quarter circle centred on its bottom outer corner:
+    // (0, h) for "left", (w, h) for "right".
+    ShapePath {
+        fillColor: corner.fill
+        strokeWidth: -1
 
-    onPaint: {
-        var ctx = getContext("2d");
-        ctx.reset();
-        if (r <= 0) return;
-        var w = width, h = height;
-        ctx.fillStyle = corner.fill;
-        ctx.beginPath();
-
-        if (side === "left") {
-            // центр выреза — в нижнем левом углу: (0, h)
-            ctx.moveTo(0, 0);
-            ctx.lineTo(w, 0);
-            ctx.lineTo(w, h);
-            ctx.lineTo(r, h);
-            ctx.arc(0, h, r, 0, -Math.PI / 2, true);
-        } else {
-            // зеркально: центр выреза в (w, h)
-            ctx.moveTo(w, 0);
-            ctx.lineTo(0, 0);
-            ctx.lineTo(0, h);
-            ctx.lineTo(w - r, h);
-            ctx.arc(w, h, r, Math.PI, -Math.PI / 2, false);
+        startX: corner.onLeft ? 0 : corner.width
+        startY: 0
+        PathLine { x: corner.onLeft ? corner.width : 0; y: 0 }
+        PathLine { x: corner.onLeft ? corner.width : 0; y: corner.height }
+        PathLine { x: corner.onLeft ? corner.r : corner.width - corner.r; y: corner.height }
+        PathArc {
+            x: corner.onLeft ? 0 : corner.width
+            y: corner.height - corner.r
+            radiusX: corner.r
+            radiusY: corner.r
+            direction: corner.onLeft ? PathArc.Counterclockwise : PathArc.Clockwise
         }
-
-        ctx.closePath();
-        ctx.fill();
+        PathLine { x: corner.onLeft ? 0 : corner.width; y: 0 }
     }
 }
