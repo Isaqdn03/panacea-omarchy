@@ -53,8 +53,12 @@ Item {
     readonly property real ownX: edge === "left" ? off - overlap
                                : edge === "right" ? width - off - ownW + overlap
                                : Math.round((width - ownW) / 2)
+    // On a side edge it opens centred and then keeps its top, so a taller
+    // tab grows it downward (and up only once it would leave the screen).
+    property real pinnedY: -1
     readonly property real ownY: edge === "top" ? off - overlap
                                : edge === "bottom" ? height - off - ownH + overlap
+                               : pinnedY >= 0 ? Math.max(12, Math.min(pinnedY, height - 12 - ownH))
                                : Math.round((height - ownH) / 2)
 
     // --- motion state --------------------------------------------------------
@@ -91,6 +95,8 @@ Item {
         contentHolder.opacity = 1;
         // Esc reaches the content, and the island, from the first frame
         Qt.callLater(function() { if (isl.open) loader.forceActiveFocus(); });
+        pinnedY = -1;
+        pinTimer.restart();
         if (sys.animMs <= 0) {
             tuck = 0; morph = 1; scrim.opacity = 1;
             if (page) sys.dropDrawer();
@@ -134,11 +140,19 @@ Item {
 
     function finish() {
         busy = false;
+        pinnedY = -1;
         tuck = 1; morph = 1;
         folded();
     }
 
     onOpenChanged: open ? show(sys.islandFrom) : hide()
+
+    // once the content has laid out, centred
+    Timer {
+        id: pinTimer
+        interval: 60
+        onTriggered: if (isl.busy && !isl.flat) isl.pinnedY = Math.round((isl.height - isl.ownH) / 2)
+    }
 
     // the rail first, when auto-hide had it away
     readonly property int waitMs: Math.round(sys.islandRailMs * 0.6)
@@ -270,7 +284,13 @@ Item {
             bottomRightRadius: isl.edge === "bottom" || isl.edge === "right" ? 0 : isl.freeR
             clip: true
 
+            // a tab of another height: the card follows it (a bottom edge
+            // grows it upward, so y moves too)
             Behavior on height {
+                enabled: isl.busy && isl.morph >= 1 && isl.tuck <= 0
+                NumberAnimation { duration: isl.sys.animMs; easing.type: Easing.InOutCubic }
+            }
+            Behavior on y {
                 enabled: isl.busy && isl.morph >= 1 && isl.tuck <= 0
                 NumberAnimation { duration: isl.sys.animMs; easing.type: Easing.InOutCubic }
             }
@@ -281,12 +301,15 @@ Item {
                 acceptedButtons: Qt.AllButtons
             }
 
-            // The content sits where the island will be, whatever the card's
-            // shape on the way: it never reflows, the card shows what fits.
+            // While it changes shape the content sits where the island will
+            // be: it never reflows, the card shows what fits. Settled, it
+            // moves with the card.
             Item {
                 id: contentHolder
-                x: isl.ownX + isl.pad + (isl.edge === "left" ? isl.overlap + isl.inset : 0) - card.x
-                y: isl.ownY + isl.pad + (isl.edge === "top" ? isl.overlap + isl.inset : 0) - card.y
+                x: isl.pad + (isl.edge === "left" ? isl.overlap + isl.inset : 0)
+                   + (isl.morph < 1 ? Math.round(isl.ownX) - card.x : 0)
+                y: isl.pad + (isl.edge === "top" ? isl.overlap + isl.inset : 0)
+                   + (isl.morph < 1 ? Math.round(isl.ownY) - card.y : 0)
                 width: isl.contentWidth
                 height: isl.contentHeight
 

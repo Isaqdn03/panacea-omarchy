@@ -1,20 +1,24 @@
 import QtQuick
 import QtQuick.Layouts
 
-// PANACEA-LOCAL: the layout island's content (BarIsland.qml): the bar's
-// shape, its edge and auto-hide, applied as they are picked. Moving the bar
-// takes the island with it (sys.moveBar): it folds into the bar, the bar
-// goes to its new place, and the island comes back out of it there.
-//
-// The picture is the screen, with the bar drawn where and as it is; a click
-// near one of its edges moves the bar there.
+// PANACEA-LOCAL: the layout island's content (BarIsland.qml): everything
+// about the bar, applied as it is picked, in three tabs.
+// - Place: where the bar is. Moving it takes the island with it
+//   (sys.moveBar): it folds into the bar, the bar goes to its new place, and
+//   the island comes back out of it there. The picture is the screen, with
+//   the bar drawn where and as it is; a click near an edge moves it there.
+// - Look: attached or floating, and its sizes.
+// - Pages: the pages that open out of the bar.
+// Only what applies to the bar as it is now is shown, never greyed out.
 ColumnLayout {
     id: view
 
     property var sys
+    property string tab: "place"
 
     spacing: 14
 
+    readonly property bool sideRail: view.sys.railMode && view.sys.pillSide
     readonly property var shapes: [
         { id: "rail", text: "Rail" },
         { id: "pill", text: "Pill" }
@@ -26,23 +30,9 @@ ColumnLayout {
         { id: "right", text: "Right" }
     ]
 
-    // --------------------------------------------------------------- header
-    ColumnLayout {
-        Layout.fillWidth: true
-        spacing: 2
-
-        Text {
-            text: "Layout"
-            color: view.sys.colFg
-            font { family: view.sys.fontBody; pixelSize: view.sys.fontSize + 1; bold: true }
-        }
-        Text {
-            Layout.fillWidth: true
-            text: "Where the bar sits and how it behaves"
-            color: view.sys.colMuted
-            elide: Text.ElideRight
-            font { family: view.sys.fontBody; pixelSize: view.sys.fontSize - 4 }
-        }
+    function set(key, value) {
+        view.sys.cfg[key] = value;
+        view.sys.saveCfg();
     }
 
     // How a bar looks on the picture, on a given edge. (Inline components
@@ -63,57 +53,9 @@ ColumnLayout {
         radius: thick / 2
     }
 
-    // -------------------------------------------------------------- picture
-    // The screen at its own proportions, the bar drawn on it.
-    Rectangle {
-        id: screenPic
-        Layout.fillWidth: true
-        readonly property real aspect: view.sys.screen && view.sys.screen.height > 0
-                                       ? view.sys.screen.width / view.sys.screen.height : 16 / 9
-        Layout.preferredHeight: Math.round(width / aspect)
-        radius: 12
-        color: Qt.rgba(view.sys.colFg.r, view.sys.colFg.g, view.sys.colFg.b, 0.05)
-        border.width: 1
-        border.color: Qt.rgba(view.sys.colFg.r, view.sys.colFg.g, view.sys.colFg.b, 0.10)
-
-        // the edge under the pointer, which a click would pick
-        property string hoverEdge: ""
-        function edgeAt(px, py) {
-            var dx = Math.min(px, width - px) / width;
-            var dy = Math.min(py, height - py) / height;
-            if (dx < dy) return px < width / 2 ? "left" : "right";
-            return py < height / 2 ? "top" : "bottom";
-        }
-
-        // where the bar would go
-        BarMark {
-            pic: screenPic
-            edge: screenPic.hoverEdge || "top"
-            rail: view.sys.railMode
-            visible: picMa.containsMouse && screenPic.hoverEdge.length > 0
-                     && screenPic.hoverEdge !== view.sys.pillPos
-            color: Qt.rgba(view.sys.colFg.r, view.sys.colFg.g, view.sys.colFg.b, 0.22)
-        }
-        // where it is
-        BarMark {
-            pic: screenPic
-            edge: view.sys.pillPos
-            rail: view.sys.railMode
-            color: view.sys.colFg
-        }
-
-        MouseArea {
-            id: picMa
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onPositionChanged: mouse => screenPic.hoverEdge = screenPic.edgeAt(mouse.x, mouse.y)
-            onExited: screenPic.hoverEdge = ""
-            onClicked: mouse => view.sys.moveBar(view.sys.barShape, screenPic.edgeAt(mouse.x, mouse.y))
-        }
-    }
-
-    // -------------------------------------------------------------- choices
+    // Segments in a track; the picked one is a solid pill, the others only
+    // answer the pointer. With a label it sits right of it; without one it
+    // fills the row in equal parts (the tabs).
     component Choice: RowLayout {
         id: choice
         property var sys
@@ -127,6 +69,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
+            visible: choice.label.length > 0
             text: choice.label
             color: choice.sys.colFg
             elide: Text.ElideRight
@@ -134,7 +77,10 @@ ColumnLayout {
         }
 
         Rectangle {
-            Layout.preferredWidth: segs.implicitWidth + 6
+            id: track
+            readonly property bool full: choice.label.length === 0
+            Layout.fillWidth: full
+            Layout.preferredWidth: full ? -1 : segs.implicitWidth + 6
             Layout.preferredHeight: 32
             radius: 16
             color: Qt.rgba(choice.sys.colFg.r, choice.sys.colFg.g, choice.sys.colFg.b, 0.06)
@@ -150,11 +96,10 @@ ColumnLayout {
                         id: seg
                         required property var modelData
                         readonly property bool active: choice.value === seg.modelData.id
-                        width: segText.implicitWidth + 24
+                        width: track.full ? Math.floor((track.width - 6 - 2 * (choice.options.length - 1)) / choice.options.length)
+                                          : segText.implicitWidth + 24
                         height: 26
                         radius: 13
-                        // the picked one is a solid pill; the others only
-                        // answer the pointer
                         color: seg.active ? choice.sys.colFg
                              : segMa.containsMouse ? Qt.rgba(choice.sys.colFg.r, choice.sys.colFg.g, choice.sys.colFg.b, 0.08)
                              : "transparent"
@@ -180,28 +125,230 @@ ColumnLayout {
         }
     }
 
-    Choice {
-        sys: view.sys
-        label: "Shape"
-        options: view.shapes
-        value: view.sys.barShape
-        onPicked: id => view.sys.moveBar(id, view.sys.pillPos)
+    // --------------------------------------------------------------- header
+    ColumnLayout {
+        Layout.fillWidth: true
+        spacing: 2
+
+        Text {
+            text: "Layout"
+            color: view.sys.colFg
+            font { family: view.sys.fontBody; pixelSize: view.sys.fontSize + 1; bold: true }
+        }
+        Text {
+            Layout.fillWidth: true
+            text: "Where the bar sits, how it looks and what opens out of it"
+            color: view.sys.colMuted
+            elide: Text.ElideRight
+            font { family: view.sys.fontBody; pixelSize: view.sys.fontSize - 4 }
+        }
     }
 
     Choice {
         sys: view.sys
-        label: "Edge"
-        options: view.edges
-        value: view.sys.pillPos
-        onPicked: id => view.sys.moveBar(view.sys.barShape, id)
+        options: [
+            { id: "place", text: "Place" },
+            { id: "look", text: "Look" },
+            { id: "pages", text: "Pages" }
+        ]
+        value: view.tab
+        onPicked: id => view.tab = id
     }
 
-    SetToggle {
-        sys: view.sys
-        label: "Auto-hide"
-        sub: view.sys.cfg.pillAutoHide ? "Floats over windows and shows at the edge"
-                                       : "Stays out and keeps windows clear of it"
-        on: view.sys.cfg.pillAutoHide
-        onToggled: value => { view.sys.cfg.pillAutoHide = value; view.sys.saveCfg(); }
+    // ---------------------------------------------------------------- place
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: view.tab === "place"
+        spacing: 14
+
+        // The screen at its own proportions, the bar drawn on it.
+        Rectangle {
+            id: screenPic
+            Layout.fillWidth: true
+            readonly property real aspect: view.sys.screen && view.sys.screen.height > 0
+                                           ? view.sys.screen.width / view.sys.screen.height : 16 / 9
+            Layout.preferredHeight: Math.round(width / aspect)
+            radius: 12
+            color: Qt.rgba(view.sys.colFg.r, view.sys.colFg.g, view.sys.colFg.b, 0.05)
+            border.width: 1
+            border.color: Qt.rgba(view.sys.colFg.r, view.sys.colFg.g, view.sys.colFg.b, 0.10)
+
+            // the edge under the pointer, which a click would pick
+            property string hoverEdge: ""
+            function edgeAt(px, py) {
+                var dx = Math.min(px, width - px) / width;
+                var dy = Math.min(py, height - py) / height;
+                if (dx < dy) return px < width / 2 ? "left" : "right";
+                return py < height / 2 ? "top" : "bottom";
+            }
+
+            // where the bar would go
+            BarMark {
+                pic: screenPic
+                edge: screenPic.hoverEdge || "top"
+                rail: view.sys.railMode
+                visible: picMa.containsMouse && screenPic.hoverEdge.length > 0
+                         && screenPic.hoverEdge !== view.sys.pillPos
+                color: Qt.rgba(view.sys.colFg.r, view.sys.colFg.g, view.sys.colFg.b, 0.22)
+            }
+            // where it is
+            BarMark {
+                pic: screenPic
+                edge: view.sys.pillPos
+                rail: view.sys.railMode
+                color: view.sys.colFg
+            }
+
+            MouseArea {
+                id: picMa
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onPositionChanged: mouse => screenPic.hoverEdge = screenPic.edgeAt(mouse.x, mouse.y)
+                onExited: screenPic.hoverEdge = ""
+                onClicked: mouse => view.sys.moveBar(view.sys.barShape, screenPic.edgeAt(mouse.x, mouse.y))
+            }
+        }
+
+        Choice {
+            sys: view.sys
+            label: "Shape"
+            options: view.shapes
+            value: view.sys.barShape
+            onPicked: id => view.sys.moveBar(id, view.sys.pillPos)
+        }
+
+        Choice {
+            sys: view.sys
+            label: "Edge"
+            options: view.edges
+            value: view.sys.pillPos
+            onPicked: id => view.sys.moveBar(view.sys.barShape, id)
+        }
+
+        SetToggle {
+            sys: view.sys
+            label: "Auto-hide"
+            sub: view.sys.cfg.pillAutoHide ? "Floats over windows and shows at the edge"
+                                           : "Stays out and keeps windows clear of it"
+            on: view.sys.cfg.pillAutoHide
+            onToggled: value => view.set("pillAutoHide", value)
+        }
+    }
+
+    // ----------------------------------------------------------------- look
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: view.tab === "look"
+        spacing: 16
+
+        Choice {
+            sys: view.sys
+            label: "Style"
+            options: [
+                { id: "attached", text: "Attached" },
+                { id: "floating", text: "Floating" }
+            ]
+            value: view.sys.cfg.notchMode ? "attached" : "floating"
+            onPicked: id => view.set("notchMode", id === "attached")
+        }
+
+        // a side rail keeps its own width, for its column of figures
+        SetSlider {
+            sys: view.sys
+            visible: !view.sideRail
+            label: "Thickness"
+            from: 24; to: 72; step: 1
+            value: view.sys.cfg.pillH
+            suffix: "px"
+            onMoved: v => view.set("pillH", v)
+        }
+
+        SetSlider {
+            sys: view.sys
+            visible: view.sys.cfg.notchMode
+            label: "Flare"
+            from: 0; to: 32; step: 1
+            value: view.sys.cfg.notchFlare
+            suffix: "px"
+            onMoved: v => view.set("notchFlare", v)
+        }
+
+        SetSlider {
+            sys: view.sys
+            visible: !view.sys.cfg.notchMode
+            label: "Gap from the edge"
+            from: 0; to: 48; step: 1
+            value: view.sys.cfg.islandGap
+            suffix: "px"
+            onMoved: v => view.set("islandGap", v)
+        }
+
+        SetSlider {
+            sys: view.sys
+            visible: !view.sys.cfg.notchMode
+            label: "Corner radius"
+            from: 0; to: 40; step: 1
+            value: view.sys.cfg.islandRadius
+            // zero is "round": half the bar's thickness, not square corners
+            valueText: view.sys.cfg.islandRadius === 0 ? "round" : view.sys.cfg.islandRadius + " px"
+            onMoved: v => view.set("islandRadius", v)
+        }
+
+        SetSlider {
+            sys: view.sys
+            visible: !view.sys.railMode
+            label: "Pill length"
+            from: 120; to: 640; step: 4
+            value: view.sys.cfg.collapsedW
+            suffix: "px"
+            onMoved: v => view.set("collapsedW", v)
+        }
+    }
+
+    // ---------------------------------------------------------------- pages
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: view.tab === "pages"
+        spacing: 16
+
+        SetSlider {
+            sys: view.sys
+            label: "Page width"
+            from: 380; to: 900; step: 10
+            value: view.sys.cfg.panelW
+            suffix: "px"
+            onMoved: v => view.set("panelW", v)
+        }
+
+        // a side rail's drawer always runs the full height
+        SetSlider {
+            sys: view.sys
+            visible: !view.sideRail
+            label: "Page height"
+            from: 260; to: 1000; step: 10
+            value: view.sys.cfg.expandedH
+            suffix: "px"
+            onMoved: v => view.set("expandedH", v)
+        }
+
+        // a rail always stays as it is (or opens into its drawer)
+        SetToggle {
+            sys: view.sys
+            visible: !view.sys.railMode
+            label: "Keep the pill when a page opens"
+            sub: "Pages open in a card of their own beside it"
+            on: view.sys.cfg.pillKeepVisible
+            onToggled: value => view.set("pillKeepVisible", value)
+        }
+
+        SetToggle {
+            sys: view.sys
+            visible: !view.sys.railMode
+            label: "Drag to another edge"
+            sub: "A handle on the Control Center carries the pill to any edge"
+            on: view.sys.cfg.pillDrag
+            onToggled: value => view.set("pillDrag", value)
+        }
     }
 }

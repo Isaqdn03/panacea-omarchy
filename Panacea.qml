@@ -876,7 +876,9 @@ PanelWindow {
         return pillAtLeft ? "rail" : "pill";
     }
     readonly property bool railMode: barShape === "rail"
-    readonly property int  railW: 38
+    // The rail's thickness: on a side edge 38, room for its column of
+    // figures; on the top or bottom the bar height, the same as the pill.
+    readonly property int  railW: pillSide ? 38 : pillH
     // railFull: a rail on a side edge, which opens into a full-height drawer.
     // railFlat: a rail on the top or bottom edge; its pages hang from it in a
     // card of their own (detachedPanel), as a drawer across the whole width
@@ -902,27 +904,6 @@ PanelWindow {
     readonly property bool cardOnPill: !railMode && (toastActive || btToastActive || acToastActive
                                                      || recPickActive || voxActive)
     readonly property bool osdOnPill: osdActive && !(railMode && osdKind === "msg")
-
-    // PANACEA-LOCAL: Settings > Bar & Island > Layout, the bar's shape on
-    // its own edge. The switch sits inside Settings, so close that first and
-    // change only after the page has reset: flipping railMode while the modal
-    // fades out would hand its content back to the capsule mid-fade.
-    property string pendingShape: ""
-    function setLayout(id) {
-        if (id === barShape) return;
-        pendingShape = id;
-        collapse();
-        layoutSwitchTimer.restart();
-    }
-    Timer {
-        id: layoutSwitchTimer
-        interval: root.animMs + 80
-        onTriggered: {
-            root.cfg.barShape = root.pendingShape;
-            root.pendingShape = "";
-            root.saveCfg();
-        }
-    }
 
     // ------------------------------------------------- islands out of the bar
     // PANACEA-LOCAL: surfaces of Panacea's own that grow out of the bar
@@ -950,6 +931,21 @@ PanelWindow {
         root.island = name;
     }
     function closeIsland() { root.island = ""; }
+    // From Settings (Bar & Island): the modal fades out first, then the
+    // island comes out of the bar.
+    function openLayout() {
+        if (root.expanded) {
+            root.collapse();
+            layoutAfterModal.restart();
+        } else {
+            root.toggleIsland("layout");
+        }
+    }
+    Timer {
+        id: layoutAfterModal
+        interval: root.animMs + 80
+        onTriggered: if (root.island === "") root.toggleIsland("layout")
+    }
 
     // Move the bar, taking the island along: it folds into the bar, the bar
     // slides away off its edge (barAway), takes its new shape and edge out of
