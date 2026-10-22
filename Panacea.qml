@@ -1560,6 +1560,7 @@ PanelWindow {
     // до списка было не дотянуться. Возврат — Esc или кнопка «назад».
     function openSub(name) {
         pageResetTimer.stop();
+        if (!expanded) anchorSheet();   // PANACEA-LOCAL
         page = name;
         expanded = true;
         holdOpen = true;
@@ -1579,9 +1580,20 @@ PanelWindow {
         }
         if (expanded && page === name) { collapse(); return; }
         pageResetTimer.stop();
+        if (!expanded) anchorSheet();   // PANACEA-LOCAL
         page = name;
         expanded = true;
         holdOpen = true;
+    }
+    // PANACEA-LOCAL: a top or bottom rail runs the screen's whole width, and
+    // its sheet hangs under the pointer that opens it (detachedPanel), not
+    // in the middle: from the middle, the pointer crossed open screen on its
+    // way down to it, and the sheet closed under it (collapseTimer). Opened
+    // from the keyboard, it stays centred.
+    property real sheetAnchor: -1
+    function anchorSheet() {
+        root.sheetAnchor = root.railFlat && capsuleHover.hovered
+                         ? capsuleHover.point.scenePosition.x : -1;
     }
     function openLauncher() {
         if (!cfg.featLauncher) return;
@@ -4439,8 +4451,7 @@ PanelWindow {
     Rectangle {
         id: capsule
         // PANACEA-LOCAL: above what comes out of the bar, so it tucks away
-        // behind the bar: the sheet of a top or bottom rail (detachedPanel)
-        // and the islands (BarIsland)
+        // behind the bar (the islands, BarIsland)
         z: 51
 
         // Прижата к своей кромке и растёт от неё — поэтому «раскрытие к
@@ -4798,6 +4809,7 @@ PanelWindow {
             if (!root.expanded) {
                 pageResetTimer.stop();
                 root.page = "main";
+                root.anchorSheet();
             }
             root.expanded = true;
         }
@@ -6813,19 +6825,13 @@ PanelWindow {
 
         visible: root.keepBar && !root.settingsMode && (root.expanded || opacity > 0.005)
         // PANACEA-LOCAL: from a top or bottom rail the card hangs from the
-        // rail (sheet): it slides out from behind it and folds back in, whole
-        // the whole way (the rail, above it, covers it while tucked), with
-        // flares where it meets the rail. tuck: 0 out, 1 behind the rail.
+        // rail (sheet), with flares where it meets it, and grows out of it
+        // the way a side rail's drawer does: its free edge moves, on the
+        // drawer's own duration and curve, and it is there for as long as it
+        // has any height. It opens under the pointer that opened it
+        // (sheetAnchor), so the pointer goes straight down into it.
         readonly property bool sheet: root.railFlat
-        property real tuck: showMe ? 0 : 1
-        Behavior on tuck {
-            enabled: detachedPanel.sheet && !root.drawerSnap
-            NumberAnimation {
-                duration: detachedPanel.showMe ? root.animMs : root.animFast + 40
-                easing.type: detachedPanel.showMe ? Easing.OutCubic : Easing.InCubic
-            }
-        }
-        opacity: sheet ? (tuck < 0.999 ? 1 : 0) : (showMe ? 1 : 0)
+        opacity: sheet ? (height > 0.5 ? 1 : 0) : (showMe ? 1 : 0)
         scale: sheet || showMe ? 1 : 0.96
 
         transformOrigin: root.pillAtBottom ? Item.Bottom
@@ -6835,8 +6841,7 @@ PanelWindow {
 
         transform: Translate {
             id: sheetShift
-            y: detachedPanel.sheet
-               ? detachedPanel.tuck * (detachedPanel.height + root.cornerR + 4) * (root.pillAtBottom ? 1 : -1)
+            y: detachedPanel.sheet ? 0
                : root.pillAtBottom
                ? (detachedPanel.showMe ? 0 : 10)
                : (detachedPanel.showMe ? 0 : -10)
@@ -6895,12 +6900,28 @@ PanelWindow {
         readonly property real roomH: root.pillAtBottom ? capsule.y - panelGap - 24
                                     : root.pillAtTop ? root.height - (capsule.y + capsule.height + panelGap + 24)
                                     : root.height - 24
-        height: (root.keepBar && !root.settingsMode && (root.expanded || opacity > 0.005))
+        height: sheet ? (showMe ? Math.min(detachedTargetH, roomH) : 0)
+              : (root.keepBar && !root.settingsMode && (root.expanded || opacity > 0.005))
                 ? Math.min(detachedTargetH, roomH)
                 : 0
-        Behavior on height { NumberAnimation { duration: root.animQuick; easing.type: Easing.OutCubic } }
+        // Opening, closing or changing page: the drawer's duration and curve.
+        // Read off the sheet itself (no height yet, or going): morphing is
+        // set a beat after the height has already started to move.
+        readonly property bool sheetMoving: sheet && (root.morphing || !showMe || height < 2)
+        Behavior on height {
+            // dropDrawer: an island covers the sheet; it goes at once
+            enabled: !(detachedPanel.sheet && root.drawerSnap)
+            NumberAnimation {
+                duration: detachedPanel.sheetMoving ? root.animMs : root.animQuick
+                easing.type: !detachedPanel.sheetMoving ? Easing.OutCubic
+                           : root.animBounce > 0 ? Easing.OutBack : Easing.InOutCubic
+                easing.overshoot: root.easeOvershoot
+            }
+        }
 
-        x: root.pillSide
+        x: sheet && root.sheetAnchor >= 0
+           ? Math.max(12, Math.min(root.width - width - 12, Math.round(root.sheetAnchor - width / 2)))
+           : root.pillSide
            ? (root.pillAtLeft  ? capsule.x + capsule.width + panelGap
               : root.pillAtRight ? capsule.x - width - panelGap
               : Math.max(12, Math.min(root.width - width - 12, capsule.x + (capsule.width - width) / 2)))
@@ -6959,6 +6980,7 @@ PanelWindow {
             required property string modelData
             z: 50
             visible: detachedPanel.sheet && detachedPanel.visible && root.cornerR > 0
+            opacity: Math.min(1, detachedPanel.height / Math.max(1, root.cornerR * 2))
             // the flare left of the sheet hugs the rail and the sheet's left side
             side: modelData === "left" ? "left" : "right"
             fill: root.colBg
