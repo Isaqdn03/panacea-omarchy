@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "isaqdn.panacea-osd",
+  "name": "Panacea OSD",
+  "version": "1.0.0",
+  "author": "isaqdn",
+  "description": "Sends Omarchy's volume, brightness and media pop-ups to Panacea's rail",
+  "kinds": [
+    "panel"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "panel": "Osd.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.osd"
+  }
+}

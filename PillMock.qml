@@ -79,7 +79,7 @@ Item {
                        pixelSize: mock.fs; bold: true }
             }
             Text {
-                text: mock.sys ? String(mock.sys.wsId) : "1"
+                text: mock.sys ? mock.sys.wsLabel(mock.sys.wsId) : "1"
                 color: mock.fgCol
                 font { family: mock.sys ? mock.sys.fontFam : "monospace"
                        pixelSize: mock.fs - 1; bold: true }
@@ -143,7 +143,7 @@ Item {
             }
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                text: mock.sys ? String(mock.sys.wsId) : "1"
+                text: mock.sys ? mock.sys.wsLabel(mock.sys.wsId) : "1"
                 color: mock.fgCol
                 font { family: mock.sys ? mock.sys.fontFam : "monospace"
                        pixelSize: mock.fs - 1; bold: true }

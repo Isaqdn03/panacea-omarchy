@@ -483,8 +483,10 @@ PanelWindow {
     function saveCfg() { cfgFile.writeAdapter(); }
 
     // Перевод. Ключ — русский текст, поэтому исходники остаются читаемыми,
-    // а словарь нужен только для английского; сами строки — в Translations.qml.
-    readonly property Translations i18n: Translations {}
+    // а словарь нужен только для английского; сами строки — в PanaceaStrings.qml.
+    // Not Translations.qml: since Omarchy 4.5, qs.Commons has a Translations
+    // type of its own, which took the name and left every label in Russian.
+    readonly property PanaceaStrings i18n: PanaceaStrings {}
 
     readonly property bool isEn: cfg.lang === "en"
     function tr(k) { return isEn && i18n.en[k] !== undefined ? i18n.en[k] : k; }
@@ -2550,7 +2552,7 @@ PanelWindow {
     //   omarchy notification dismiss <summary> -> dismiss
     // "Popups" are the toast on screen plus the ones queued behind it; they
     // stay in the history (the Notifications page) when dismissed.
-    IpcHandler {
+    ShellIpc {
         target: "notifications"
 
         function dndState(): string { return root.dnd ? "on" : "off"; }
@@ -2643,7 +2645,7 @@ PanelWindow {
         id: vaultPam
         // тот же профиль, что у экрана блокировки: проверяет пароль
         // пользователя — тот, который спрашивает sudo
-        config: "swaylock"
+        config: "omarchy-lock-password"
         onPamMessage: {
             if (responseRequired) respond(root.vaultKey);
         }
@@ -2978,7 +2980,7 @@ PanelWindow {
         osdMessage = message.length ? message : String(p.progressText || "");
         showOsd("msg", 0, false, hold);
     }
-    IpcHandler {
+    ShellIpc {
         target: "osd"
         function show(payloadJson: string): string { root.showOmarchyOsd(payloadJson); return "ok"; }
         function close(): string { root.osdKind = ""; return "ok"; }
@@ -3104,11 +3106,45 @@ PanelWindow {
     // Столы по порядку номеров — для точек в свёрнутом острове. Спецстолы
     // (отрицательные) пропускаем: на них не переходят подряд с остальными,
     // и точка под них сбивала бы счёт.
+    //
+    // Omarchy 4.5 gives every monitor ten workspaces of its own, numbered in
+    // blocks (DP-1 1-10, DP-2 11-20; default/hypr/monitor-workspaces.lua), and
+    // SUPER + 1..0 act on the focused monitor's block. The list follows the
+    // same rule: the focused monitor's workspaces, labelled 1-10 (wsLabel).
+    readonly property int wsSlots: 10
+    // Connector -> block, from the file Hyprland keeps them in.
+    property var wsBlocks: ({})
+    function readWsBlocks(text) {
+        var next = {};
+        var lines = String(text || "").split("\n");
+        for (var i = 0; i < lines.length; i++) {
+            var fields = lines[i].split("\t");
+            if (fields.length >= 3 && fields[1] !== "") next[fields[1]] = parseInt(fields[0], 10);
+        }
+        return next;
+    }
+    FileView {
+        path: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/omarchy/monitor-workspaces"
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.wsBlocks = root.readWsBlocks(text())
+        onLoadFailed: root.wsBlocks = ({})
+    }
+    // Until Hyprland has written the file, the focused workspace's own block.
+    readonly property int wsBlock: {
+        var monitor = Hyprland.focusedMonitor;
+        var block = monitor ? root.wsBlocks[monitor.name] : undefined;
+        return block !== undefined ? block : Math.floor((root.wsId - 1) / root.wsSlots);
+    }
+    function wsLabel(id) { return String((id - 1) % root.wsSlots + 1); }
+
     readonly property var wsRaw: {
         var out = [];
         var all = Hyprland.workspaces ? Hyprland.workspaces.values : [];
         for (var i = 0; i < all.length; i++)
-            if (all[i] && all[i].id > 0) out.push(all[i].id);
+            if (all[i] && all[i].id > 0 && Math.floor((all[i].id - 1) / root.wsSlots) === root.wsBlock)
+                out.push(all[i].id);
         out.sort(function (a, b) { return a - b; });
         return out;
     }
@@ -3738,7 +3774,7 @@ PanelWindow {
     Timer { id: btScanStop; interval: 12000; onTriggered: if (root.btAdapter) root.btAdapter.discovering = false }
 
     // -------------------------------------------------------------------- IPC
-    IpcHandler {
+    ShellIpc {
         target: "pill"
         // PANACEA-LOCAL: show the auto-hidden pill for a few seconds (SUPER + `)
         function peek(): void { root.peekPill(); }
@@ -5424,7 +5460,7 @@ PanelWindow {
 
             // номер текущего рабочего стола: перелистывается при смене
             FlipText {
-                value: String(root.wsId)
+                value: root.wsLabel(root.wsId)
                 textColor: root.colFg
                 fontFam: root.fontFam
                 pixelSize: root.fontSize - 1
@@ -6235,7 +6271,7 @@ PanelWindow {
 
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: String(root.wsId)
+                    text: root.wsLabel(root.wsId)
                     color: root.colFg
                     font { family: root.fontFam; pixelSize: root.fontSize - 1; bold: true }
                 }

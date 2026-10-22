@@ -46,7 +46,7 @@ Item {
                 }
                 Text {
                     anchors.centerIn: parent
-                    text: String(wsCell.modelData)
+                    text: rail.sys.wsLabel(wsCell.modelData)
                     color: wsCell.current ? rail.sys.colFg : rail.sys.colMuted
                     font { family: rail.sys.fontFam; pixelSize: rail.sys.fontSize - 2; bold: wsCell.current }
                 }
