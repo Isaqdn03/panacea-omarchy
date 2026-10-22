@@ -1,0 +1,7 @@
+#!/bin/bash
+# Panacea's health check at login: quiet unless something needs attention.
+# Installed by isaqdn.panacea/scripts/health.sh install. Detached, so its wait
+# for the shell holds up no other post-boot hook.
+health="$HOME/.config/omarchy/plugins/isaqdn.panacea/scripts/health.sh"
+[[ -x $health ]] || exit 0
+setsid -f "$health" check --at-boot >/dev/null 2>&1

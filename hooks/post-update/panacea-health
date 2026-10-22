@@ -1,0 +1,8 @@
+#!/bin/bash
+# Panacea's health check after an Omarchy update. Installed by
+# isaqdn.panacea/scripts/health.sh install; the check itself lives in the
+# plugin, so it updates with Panacea.
+health="$HOME/.config/omarchy/plugins/isaqdn.panacea/scripts/health.sh"
+[[ -x $health ]] || exit 0
+# Its findings go to the report and a notification, not to "Hook failed".
+"$health" check --after-update || true
