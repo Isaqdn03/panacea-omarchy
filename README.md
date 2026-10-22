@@ -24,6 +24,7 @@ omarchy plugin disable omarchy.notifications
 # The companions (see below), and the health check after every update.
 ~/.config/omarchy/plugins/isaqdn.panacea/scripts/companions.sh install
 omarchy plugin enable isaqdn.panacea-osd
+omarchy plugin enable isaqdn.panacea-menu
 ~/.config/omarchy/plugins/isaqdn.panacea/scripts/health.sh install
 
 omarchy restart shell
@@ -51,8 +52,10 @@ fast-forwards the checkout. Run `scripts/companions.sh install` afterwards if
 the health check says a companion is out of date.
 
 To go back to Omarchy's bar, run `omarchy bar use omarchy.bar`, then
-`omarchy plugin disable isaqdn.panacea-osd`, `omarchy plugin enable omarchy.osd`
-and `omarchy plugin enable omarchy.notifications`, then `omarchy restart shell`.
+`omarchy plugin disable isaqdn.panacea-osd`, `omarchy plugin disable
+isaqdn.panacea-menu` (Omarchy's menu comes back with it), `omarchy plugin enable
+omarchy.osd` and `omarchy plugin enable omarchy.notifications`, then
+`omarchy restart shell`.
 
 **NVIDIA.** Qt only enables its threaded render loop for Mesa and Mali drivers.
 Everywhere else Qt Quick animations tick at about 60 fps, even on a high-refresh
@@ -121,6 +124,7 @@ plugin's calls to the companion. Omarchy keeps the service; Panacea draws it.
 | --- | --- | --- |
 | `isaqdn.panacea-osd` | `omarchy.osd` | Sends the volume, brightness and media pop-ups to Panacea's rail |
 | `isaqdn.panacea-notifications` | `omarchy.notifications` | Omarchy's notifications, drawn in Panacea's look; hosts the notification panel at the top right |
+| `isaqdn.panacea-menu` | `omarchy.menu` | Omarchy's menu and its pickers (`omarchy menu`, `omarchy-menu-select`, `omarchy-menu-input`), drawn as Panacea's launcher in Panacea's modal card |
 
 Each one lives in `companions/<name>/` and is installed as its own plugin folder
 by `scripts/companions.sh install`: Omarchy only loads plugins at the top level

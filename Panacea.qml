@@ -3823,7 +3823,7 @@ PanelWindow {
                 bg: String(root.colBg), fg: String(root.colFg), muted: String(root.colMuted),
                 line: String(root.colLine), hover: String(root.colHover), on: String(root.colOn),
                 crit: String(root.colCrit), fontFam: root.fontFam, fontSize: root.fontSize,
-                iconSize: root.iconSize
+                iconSize: root.iconSize, animMs: root.animMs
             });
         }
         // индикатор голосового ввода: зовёт voxtype.sh на разных этапах

@@ -1,0 +1,5 @@
+# Panacea's addition to Omarchy's menu: with a qmldir present, the types the
+# files share are listed, so none depends on the implicit directory import.
+# The entry points (Menu.qml, BarWidget.qml) load by path and stay out:
+# BarWidget.qml's root is qs.Ui's BarWidget, which a local one would shadow.
+singleton PanaceaLook 1.0 PanaceaLook.qml
