@@ -69,6 +69,9 @@ Item {
     property real morph: 1
     property rect fromRect: Qt.rect(0, 0, 0, 0)
     property real fromR: 0
+    // the shape it came from is a top or bottom rail's sheet, which has
+    // flares of its own: the island's stay on as it changes shape
+    property bool fromSheet: false
     // busy: out, or still on its way in or out; the window keeps its input
     // and the dim while it is
     property bool busy: false
@@ -102,10 +105,15 @@ Item {
             if (page) sys.dropDrawer();
             return;
         }
+        fromSheet = !!page && sys.railFlat;
         if (page) {
             // the page's shape, faded in over it; then the page goes and the
-            // shape shrinks into the island's own
+            // shape shrinks into the island's own. A sheet stops at the rail,
+            // the island reaches under it (overlap).
             fromRect = page.rect; fromR = page.r;
+            if (fromSheet)
+                fromRect = Qt.rect(fromRect.x, fromRect.y - (edge === "top" ? overlap : 0),
+                                   fromRect.width, fromRect.height + overlap);
             tuck = 0; morph = 0; overBar = true;
             card.opacity = 0; contentHolder.opacity = 0.01; scrim.opacity = 0;
             handoffMotion.restart();
@@ -127,6 +135,7 @@ Item {
     function hide() {
         slideMotion.stop(); growMotion.stop(); handoffMotion.stop();
         overBar = false;
+        fromSheet = false;
         if (!busy) { folded(); return; }
         if (sys.animMs <= 0) { finish(); return; }
         if (sys.railMode) {
@@ -259,7 +268,7 @@ Item {
             NotchCorner {
                 required property int modelData
                 readonly property bool first: modelData === 0
-                visible: isl.flare > 0 && isl.morph > 0.98
+                visible: isl.flare > 0 && (isl.morph > 0.98 || isl.fromSheet)
                 fill: isl.sys.colBg
                 r: isl.flare
                 side: isl.flat ? (first ? "left" : "right")

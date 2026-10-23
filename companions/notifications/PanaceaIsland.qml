@@ -72,9 +72,10 @@ PanelWindow {
   readonly property int overlap: 2
 
   // holdFrom: when Panacea's drawer is out (opened from its Control Centre,
-  // say), it stays, and drawerW says how wide it is. The card then opens as
-  // the drawer itself, full height and as wide, Panacea drops the drawer
-  // under it, and the card shrinks to its own size: the island changes
+  // say), it stays, and drawerW says how wide it is; on a top or bottom rail
+  // the page is a sheet hanging from the rail, and sheet says where it is.
+  // The card then opens as the drawer or the sheet itself, Panacea drops it
+  // under the card, and the card shrinks to its own size: the island changes
   // shape, rather than folding into the rail and sliding back out.
   function holdRail(name) {
     var answer = IpcRegistry.call("pill", "holdFrom", ["notifications", name])
@@ -82,7 +83,8 @@ PanelWindow {
     try { if (answer.ran && answer.output) parsed = JSON.parse(answer.output) } catch (e) { parsed = ({}) }
     return parsed
   }
-  readonly property bool fromDrawer: docked && !flat && Number(dock.drawerW || 0) > attachOff
+  readonly property bool fromSheet: docked && flat && !!dock.sheet && Number(dock.sheet.h || 0) > 0
+  readonly property bool fromDrawer: fromSheet || (docked && !flat && Number(dock.drawerW || 0) > attachOff)
 
   // morph: 0 = the drawer's shape, 1 = the card's own. Only the opening from
   // the drawer moves it; it rests at 1.
@@ -91,6 +93,16 @@ PanelWindow {
   readonly property real ownWidth: contentWidth + (docked && !flat ? overlap : 0)
   readonly property real ownHeight: contentHeight + (docked && flat ? overlap : 0)
   readonly property real drawerWidth: Number(dock.drawerW || 0) - attachOff + overlap
+  // The shape it opens as, in dockSlide's terms: the drawer, full height and
+  // from the rail; or the sheet, reaching under the rail as the card does.
+  readonly property rect fromRect: {
+    if (!fromSheet)
+      return Qt.rect(edge === "right" ? dockClip.width - drawerWidth : 0, 0, drawerWidth, screenH)
+    var s = dock.sheet
+    return Qt.rect(s.x - dockClip.x, s.y - dockClip.y - (edge === "top" ? overlap : 0), s.w, s.h + overlap)
+  }
+  // the free corners it opens with: the drawer's are square
+  readonly property real fromRadius: fromSheet ? Number(dock.sheet.r || 0) : 0
   // In dockClip, which starts at the rail's inner side: against the rail,
   // centred along it (on a side rail at the height it opened at).
   readonly property real ownX: !docked ? Math.round(dockClip.width - margin - ownWidth)
@@ -424,9 +436,10 @@ PanelWindow {
       height: parent.height
 
       // Where the card meets the rail: above and below it on a side rail,
-      // left and right of it on a top or bottom one.
+      // left and right of it on a top or bottom one. The drawer has none, so
+      // they come at the end of a shrink from it; the sheet has the same.
       PanaceaFillet {
-        visible: root.docked && root.flare > 0 && root.morph > 0.98
+        visible: root.docked && root.flare > 0 && (root.morph > 0.98 || root.fromSheet)
         edge: root.edge
         radius: root.flare
         overlap: root.overlap
@@ -436,7 +449,7 @@ PanelWindow {
       }
 
       PanaceaFillet {
-        visible: root.docked && root.flare > 0 && root.morph > 0.98
+        visible: root.docked && root.flare > 0 && (root.morph > 0.98 || root.fromSheet)
         edge: root.edge
         below: true
         radius: root.flare
@@ -449,18 +462,17 @@ PanelWindow {
       Rectangle {
         id: card
         // At rest (morph 1) the card's own size and place; opening from the
-        // drawer, it starts as the drawer: full height, as wide, square.
-        width: root.mix(root.drawerWidth, root.ownWidth)
-        height: root.mix(root.screenH, root.ownHeight)
-        // a right rail's drawer and card grow from the right
-        x: root.edge === "right" ? dockSlide.width - width : root.ownX
-        y: root.mix(0, root.ownY)
+        // drawer or the sheet, it starts as that (fromRect).
+        width: root.mix(root.fromRect.width, root.ownWidth)
+        height: root.mix(root.fromRect.height, root.ownHeight)
+        x: root.mix(root.fromRect.x, root.ownX)
+        y: root.mix(root.fromRect.y, root.ownY)
         color: PanaceaLook.bg
         radius: PanaceaLook.modalRadius
         // Out of the rail its rail side is square and the flares round it
         // into the rail; on its own, all four corners are round. Coming from
         // the drawer, its free corners round as it shrinks.
-        function corner(onRail) { return root.docked && onRail ? 0 : root.mix(0, radius) }
+        function corner(onRail) { return root.docked && onRail ? 0 : root.mix(root.fromRadius, radius) }
         topLeftRadius: corner(root.edge === "left" || root.edge === "top")
         topRightRadius: corner(root.edge === "right" || root.edge === "top")
         bottomLeftRadius: corner(root.edge === "left" || root.edge === "bottom")
@@ -489,12 +501,14 @@ PanelWindow {
           id: contentHolder
           // The card's own content box, whatever the card's size on the way:
           // the panel never reflows while the shape moves or the card's
-          // height animates, the card's clip shows what fits.
-          // against a right rail it keeps to the card's right, where the
-          // drawer it may come from is pinned
-          x: root.edge === "right" ? card.width - root.overlap - root.padding - width
-             : root.padding + (root.docked && root.edge === "left" ? root.overlap : 0)
+          // height animates, the card's clip shows what fits. While it
+          // changes shape the content sits where the card will be, so it
+          // never slides with the shrinking shape.
+          x: (root.edge === "right" ? root.ownWidth - root.overlap - root.padding - width
+              : root.padding + (root.docked && root.edge === "left" ? root.overlap : 0))
+             + (root.morph < 1 ? Math.round(root.ownX) - card.x : 0)
           y: root.padding + (root.docked && root.edge === "top" ? root.overlap : 0)
+             + (root.morph < 1 ? Math.round(root.ownY) - card.y : 0)
           width: root.contentWidth - root.padding * 2
           height: root.contentHeight - root.padding * 2
           // Right-to-left languages read the card mirrored; the card itself

@@ -4334,19 +4334,27 @@ PanelWindow {
         if (shown) holders[who] = true;
         else delete holders[who];
         root.railHolders = holders;
-        var handOver = takeOver && shown && root.expanded && root.railFull
-                       && !root.modalMode && !root.keepBar;
+        // what it takes the place of: a side rail's drawer, or a top or
+        // bottom rail's sheet
+        var fromSheet = root.railFlat && root.shaped && detachedPanel.height > 1;
+        var handOver = takeOver && shown && root.expanded && !root.modalMode
+                       && (root.railFull ? !root.keepBar : fromSheet);
         if (handOver) drawerHandover.restart();
         else if (screen !== "" && root.expanded) root.collapse();
         // off: how far the rail reaches in from its edge on this screen (0
         // where it is not shown); x is the same for the left edge only, for
-        // companions from before the rail had other edges.
+        // companions from before the rail had other edges. sheet: the
+        // sheet's rect on the screen and the radius of its free corners.
         return JSON.stringify({
             attach: root.railMode && root.cfg.notchMode,
             edge: root.pillPos, off: shown ? root.railW : 0,
             x: shown && root.pillAtLeft ? root.railW : 0, flare: root.cornerR,
             railMs: shown && wasHidden ? Math.round(root.animMs * 0.65) : 0,
-            drawerW: handOver ? root.panelW : 0
+            drawerW: handOver && root.railFull ? root.panelW : 0,
+            sheet: handOver && root.railFlat
+                   ? { x: detachedPanel.x, y: detachedPanel.y, w: detachedPanel.width,
+                       h: detachedPanel.height, r: detachedPanel.radius }
+                   : null
         });
     }
     // The surface that took the drawer's place covers it now: the drawer
