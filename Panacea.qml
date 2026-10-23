@@ -898,6 +898,9 @@ PanelWindow {
     readonly property bool keepBar: cfg.pillKeepVisible || railFlat
     // how far the bar reaches into the screen from its edge
     readonly property int  barThick: railMode ? railW : pillH
+    // how far the bar reaches into the screen: its thickness, and the gap it
+    // stands off its edge when it floats (notch mode off)
+    readonly property int  barReach: barThick + (cfg.notchMode ? 0 : cfg.islandGap)
     // PANACEA-LOCAL: on the rail, transient cards do not squeeze into the
     // rail. A level OSD (volume, mic, brightness) draws vertically in the
     // rail itself (RailView); notifications, Bluetooth, charger, recorder
@@ -4262,9 +4265,11 @@ PanelWindow {
     // With auto-hide the bar floats over the windows and keeps no strip (one
     // that came and went with every reveal would resize them each time);
     // without it the bar always pushes them aside, and Hyprland's gaps_out
-    // spaces them from it as from every other edge.
+    // spaces them from it as from every other edge. A floating bar keeps
+    // its gap to the screen's edge in the strip too (barReach), or windows
+    // ran under it.
     exclusiveZone: (root.cfg.pillAutoHide || (root.fullscreenActive && !root.expanded))
-                   ? 0 : root.barThick
+                   ? 0 : root.barReach
     WlrLayershell.layer: WlrLayer.Overlay
     // Пока поверх экрана развёрнутое окно, пилюли не видно совсем.
     // Показываем её обратно, если панель раскрыли клавишами или если
@@ -4353,8 +4358,8 @@ PanelWindow {
         // sheet's rect on the screen and the radius of its free corners.
         return JSON.stringify({
             attach: root.railMode && root.cfg.notchMode,
-            edge: root.pillPos, off: shown ? root.railW : 0,
-            x: shown && root.pillAtLeft ? root.railW : 0, flare: root.cornerR,
+            edge: root.pillPos, off: shown ? root.barReach : 0,
+            x: shown && root.pillAtLeft ? root.barReach : 0, flare: root.cornerR,
             railMs: shown && wasHidden ? Math.round(root.animMs * 0.65) : 0,
             drawerW: handOver && root.railFull ? root.panelW : 0,
             sheet: handOver && root.railFlat
@@ -7009,8 +7014,8 @@ PanelWindow {
         anchors.top: parent.top
         anchors.right: parent.right
         // clear of a rail on the top or right edge while it is out
-        anchors.topMargin: 12 + (root.pillAtTop && !root.pillHidden ? root.railW : 0)
-        anchors.rightMargin: 12 + (root.pillAtRight && !root.pillHidden ? root.railW : 0)
+        anchors.topMargin: 12 + (root.pillAtTop && !root.pillHidden ? root.barReach : 0)
+        anchors.rightMargin: 12 + (root.pillAtRight && !root.pillHidden ? root.barReach : 0)
         width: capsule.idleLen
         height: capsule.idleThick
         radius: 18
@@ -7594,7 +7599,7 @@ PanelWindow {
     // зона острова (pillH) и зазор Hyprland. При 28 карточка вылезала
     // над верхней кромкой окна узкой полоской. Считаем от той же зоны, чтобы
     // правка пережила смену pillH и перенос пилюли на другую кромку.
-    readonly property real topPad: (root.pillAtTop ? root.barThick : 0) + 8
+    readonly property real topPad: (root.pillAtTop ? root.barReach : 0) + 8
 
     visible: root.cfg.featWidgets && root.surfaceEpoch >= 0   // PANACEA-LOCAL, see root.surfaceEpoch
     screen: root.screen

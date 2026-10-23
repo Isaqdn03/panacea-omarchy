@@ -41,7 +41,7 @@ Item {
     readonly property bool flat: edge === "top" || edge === "bottom"
     // a rail it sits beside; the pill it takes into itself, from the edge,
     // with room on that side for the pill, which is drawn over it (inset)
-    readonly property real off: sys.railMode ? sys.railW : 0
+    readonly property real off: sys.railMode ? sys.barReach : 0
     readonly property real inset: sys.railMode ? 0
                                 : sys.pillH + (sys.cfg.notchMode ? 0 : sys.cfg.islandGap)
     readonly property real flare: sys.cornerR
