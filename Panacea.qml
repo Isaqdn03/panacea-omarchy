@@ -6651,34 +6651,71 @@ PanelWindow {
                     color: Qt.rgba(1, 1, 1, 0.18)
                 }
 
-                // день недели столбиком
-                VertText {
+                // PANACEA-LOCAL: the clock as the side rail draws it (RailView):
+                // hours and minutes on their own lines, then AM/PM, a short
+                // rule, the weekday and the day, each written across. The
+                // weekday used to be stacked a letter to a line.
+                Column {
                     Layout.alignment: Qt.AlignHCenter
-                    value: root.dayText
-                    textColor: root.colMuted
-                    size: root.fontSize - 2
-                    bold: true
+                    spacing: 1
+                    readonly property string rest: String(root.timeText.split(":")[1] || "")
+                    readonly property string ampm: rest.replace(/[^A-Za-z]/g, "")
+
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.timeText.split(":")[0] || ""
+                        color: root.colFg
+                        font { family: root.fontFam; pixelSize: root.fontSize; bold: true }
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: parent.rest.replace(/[^0-9]/g, "")
+                        color: root.colFg
+                        font { family: root.fontFam; pixelSize: root.fontSize; bold: true }
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        visible: parent.ampm.length > 0
+                        text: parent.ampm
+                        color: root.colMuted
+                        font { family: root.fontFam; pixelSize: root.fontSize - 6; bold: true }
+                    }
+                    Item { width: 1; height: 6 }
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: 12
+                        height: 1
+                        color: Qt.rgba(1, 1, 1, 0.18)
+                    }
+                    Item { width: 1; height: 6 }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.dayText
+                        color: root.colMuted
+                        font { family: root.fontFam; pixelSize: root.fontSize - 5; bold: true }
+                    }
+                    Text {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        text: root.dayNum
+                        color: root.colMuted
+                        font { family: root.fontFam; pixelSize: root.fontSize - 5; bold: true }
+                    }
                 }
 
-                // часы: часы и минуты отдельными строками
-                Text {
+                // the workspace, in the chip the rail gives the current one,
+                // so it does not read as more of the clock
+                Rectangle {
                     Layout.alignment: Qt.AlignHCenter
-                    text: root.timeText.split(":")[0] || ""
-                    color: root.colFg
-                    font { family: root.fontFam; pixelSize: root.fontSize; bold: true }
-                }
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: (root.timeText.split(":")[1] || "").replace(/[^0-9]/g, "")
-                    color: root.colFg
-                    font { family: root.fontFam; pixelSize: root.fontSize; bold: true }
-                }
-
-                Text {
-                    Layout.alignment: Qt.AlignHCenter
-                    text: root.wsLabel(root.wsId)
-                    color: root.colFg
-                    font { family: root.fontFam; pixelSize: root.fontSize - 1; bold: true }
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 22
+                    radius: 8
+                    color: Qt.rgba(1, 1, 1, 0.10)
+                    Text {
+                        anchors.centerIn: parent
+                        text: root.wsLabel(root.wsId)
+                        color: root.colFg
+                        font { family: root.fontFam; pixelSize: root.fontSize - 2; bold: true }
+                    }
                 }
                 Text {
                     Layout.alignment: Qt.AlignHCenter
