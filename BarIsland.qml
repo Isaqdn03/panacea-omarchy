@@ -157,9 +157,14 @@ Item {
     // the rail first, when auto-hide had it away
     readonly property int waitMs: Math.round(sys.islandRailMs * 0.6)
 
+    // The content is built as the island is asked out, and its first frame
+    // is slow to reach the screen: taken while the island moved, it froze
+    // the motion. So nothing moves for the first warmMs (Panacea's pageHost
+    // does the same for pages). Tucked behind the rail, or at the pill's
+    // shape under the pill, the island is drawn but not seen meanwhile.
     SequentialAnimation {
         id: slideMotion
-        PauseAnimation { duration: isl.waitMs }
+        PauseAnimation { duration: Math.max(isl.waitMs, isl.sys.warmMs) }
         ParallelAnimation {
             NumberAnimation { target: isl; property: "tuck"; to: 0; duration: isl.sys.animMs; easing.type: Easing.OutCubic }
             OpacityAnimator { target: scrim; to: 1; duration: isl.sys.animMs; easing.type: Easing.OutCubic }
@@ -168,6 +173,7 @@ Item {
 
     SequentialAnimation {
         id: growMotion
+        PauseAnimation { duration: isl.sys.warmMs }
         ParallelAnimation {
             NumberAnimation { target: isl; property: "morph"; to: 1; duration: isl.sys.animMs + 20; easing.type: Easing.OutCubic }
             OpacityAnimator { target: scrim; to: 1; duration: isl.sys.animMs; easing.type: Easing.OutCubic }
@@ -260,22 +266,25 @@ Item {
                                 : (isl.edge === "left" ? "right" : "left")
                 // the square where the card meets the bar; the corner reaches
                 // past it under both (NotchCorner.overlap)
-                sqX: isl.flat ? (first ? Math.round(isl.cardX) - r : Math.round(isl.cardX + isl.cardW))
-                     : isl.edge === "left" ? Math.round(isl.cardX) + isl.overlap
-                     : Math.round(isl.cardX + isl.cardW) - isl.overlap - r
-                sqY: isl.flat ? (isl.edge === "top" ? Math.round(isl.cardY) + isl.overlap
-                                                     : Math.round(isl.cardY + isl.cardH) - isl.overlap - r)
-                     : (first ? Math.round(isl.cardY) - r : Math.round(isl.cardY + isl.cardH))
+                sqX: isl.flat ? (first ? isl.cardX - r : isl.cardX + isl.cardW)
+                     : isl.edge === "left" ? isl.cardX + isl.overlap
+                     : isl.cardX + isl.cardW - isl.overlap - r
+                sqY: isl.flat ? (isl.edge === "top" ? isl.cardY + isl.overlap
+                                                     : isl.cardY + isl.cardH - isl.overlap - r)
+                     : (first ? isl.cardY - r : isl.cardY + isl.cardH)
                 flip: isl.flat ? isl.edge === "bottom" : first
             }
         }
 
         Rectangle {
             id: card
-            x: Math.round(isl.cardX)
-            y: Math.round(isl.cardY)
-            width: Math.round(isl.cardW)
-            height: Math.round(isl.cardH)
+            // Not rounded: whole pixels made the shape step against its own
+            // curve at the slow end of a motion. At rest it is on whole
+            // pixels anyway (ownX/ownY), and the content always is.
+            x: isl.cardX
+            y: isl.cardY
+            width: isl.cardW
+            height: isl.cardH
             color: isl.sys.colBg
             // square where it meets the bar, round on its free sides
             topLeftRadius: isl.edge === "top" || isl.edge === "left" ? 0 : isl.freeR

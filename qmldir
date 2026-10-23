@@ -28,6 +28,7 @@ NotchCorner 1.0 NotchCorner.qml
 NotchShape 1.0 NotchShape.qml
 NotificationsView 1.0 NotificationsView.qml
 OverviewView 1.0 OverviewView.qml
+PageSlot 1.0 PageSlot.qml
 Panacea 1.0 Panacea.qml
 PillMock 1.0 PillMock.qml
 PowerView 1.0 PowerView.qml

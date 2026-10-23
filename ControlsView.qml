@@ -14,6 +14,12 @@ import Quickshell.Bluetooth
 Item {
     id: view
     property var sys
+    // PANACEA-LOCAL: the sub-page this view shows. Its slot (PageSlot.qml)
+    // binds it to the page it was loaded for, so while the next view is
+    // built and drawn behind it, this one stays as it is instead of folding
+    // its sections away the moment sys.page moves on. Going to another
+    // sub-page still writes sys.page.
+    property string page: sys ? sys.page : "main"
 
     // Макет для вкладки настроек: та же панель, только неживая. Показывает
     // всегда главную страницу и слушается не сохранённой раскладки, а той,
@@ -1256,11 +1262,11 @@ Item {
     Item {
         id: stack
         width: parent.width
-        implicitHeight: (view.preview || view.sys.page === "main") ? mainPage.implicitHeight
-                      : view.sys.page === "wifi" ? wifiPage.implicitHeight
-                      : view.sys.page === "netmenu" ? netMenuPage.implicitHeight
-                      : view.sys.page === "traymenu" ? trayPage.implicitHeight
-                      : view.sys.page === "battery" ? battPage.implicitHeight
+        implicitHeight: (view.preview || view.page === "main") ? mainPage.implicitHeight
+                      : view.page === "wifi" ? wifiPage.implicitHeight
+                      : view.page === "netmenu" ? netMenuPage.implicitHeight
+                      : view.page === "traymenu" ? trayPage.implicitHeight
+                      : view.page === "battery" ? battPage.implicitHeight
                       : btPage.implicitHeight
         // Высоту анимирует сама капсула в shell.qml. Вторая анимация здесь
         // складывалась с ней: капсула догоняла уже анимируемое значение,
@@ -1277,7 +1283,7 @@ Item {
             columns: 1
             columnSpacing: 0
             rowSpacing: 9
-            opacity: (view.preview || view.sys.page === "main") ? 1 : 0
+            opacity: (view.preview || view.page === "main") ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: view.sys.animFast } }
 
@@ -2336,7 +2342,7 @@ Item {
             id: battPage
             width: parent.width
             spacing: 8
-            opacity: view.sys.page === "battery" ? 1 : 0
+            opacity: view.page === "battery" ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: view.sys.animFast } }
 
@@ -2493,7 +2499,7 @@ Item {
             property bool menuConnected: false
             property bool menuKnown: false
 
-            opacity: view.sys.page === "wifi" ? 1 : 0
+            opacity: view.page === "wifi" ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: view.sys.animFast } }
 
@@ -2662,7 +2668,7 @@ Item {
             id: netMenuPage
             width: parent.width
             spacing: 3
-            opacity: view.sys.page === "netmenu" ? 1 : 0
+            opacity: view.page === "netmenu" ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: view.sys.animFast } }
 
@@ -2710,7 +2716,7 @@ Item {
             id: trayPage
             width: parent.width
             spacing: 3
-            opacity: view.sys.page === "traymenu" ? 1 : 0
+            opacity: view.page === "traymenu" ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: view.sys.animFast } }
 
@@ -2855,7 +2861,7 @@ Item {
             id: btPage
             width: parent.width
             spacing: 7
-            opacity: view.sys.page === "bt" ? 1 : 0
+            opacity: view.page === "bt" ? 1 : 0
             visible: opacity > 0.01
             Behavior on opacity { NumberAnimation { duration: view.sys.animFast } }
 
