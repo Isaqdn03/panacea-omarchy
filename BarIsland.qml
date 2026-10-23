@@ -269,7 +269,7 @@ Item {
                 required property int modelData
                 readonly property bool first: modelData === 0
                 visible: isl.flare > 0 && (isl.morph > 0.98 || isl.fromSheet)
-                fill: isl.sys.colBg
+                fill: isl.sys.colBar
                 r: isl.flare
                 side: isl.flat ? (first ? "left" : "right")
                                 : (isl.edge === "left" ? "right" : "left")
@@ -294,7 +294,7 @@ Item {
             y: isl.cardY
             width: isl.cardW
             height: isl.cardH
-            color: isl.sys.colBg
+            color: isl.sys.colBar
             // square where it meets the bar, round on its free sides
             topLeftRadius: isl.edge === "top" || isl.edge === "left" ? 0 : isl.freeR
             topRightRadius: isl.edge === "top" || isl.edge === "right" ? 0 : isl.freeR

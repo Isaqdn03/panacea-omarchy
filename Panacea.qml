@@ -825,6 +825,12 @@ PanelWindow {
     readonly property color colMuted:  Qt.rgba(colFg.r, colFg.g, colFg.b, cfg.mutedAlpha)
     readonly property color colLine:   Qt.rgba(colFg.r, colFg.g, colFg.b, 0.10)
     readonly property color colHover:  Qt.rgba(colFg.r, colFg.g, colFg.b, 0.10)
+    // PANACEA-LOCAL: the bar's own colour, and that of everything that grows
+    // out of it. The rail is the screen's bezel, the terminals' colour; the
+    // pill is a solid surface a step toward the text colour, or beside a
+    // terminal it melted away and only its text showed.
+    readonly property color colBar: railMode ? colBg
+                                    : Qt.tint(colBg, Qt.rgba(colFg.r, colFg.g, colFg.b, 0.06))
     // Nothing look under an Omarchy theme: highlight by brightness (the text
     // colour), keep the theme's accent for alerts -- the rule both Panacea's
     // Nothing and Omarchy's Nothing theme follow.
@@ -4748,7 +4754,7 @@ PanelWindow {
         visible: opacity > 0.01
         Behavior on opacity { NumberAnimation { duration: root.animFast } }
 
-        color: root.colBg
+        color: root.colBar
         // Углы у прижатой кромки срезаны, у смотрящей в экран — скруглены:
         // так остров выглядит выросшим из края, а не приклеенным к нему.
         // В режиме настроек капсула отрывается от кромки, и круглыми
@@ -7194,7 +7200,7 @@ PanelWindow {
         topRightRadius: sheet && root.pillAtTop ? 0 : radius
         bottomLeftRadius: sheet && root.pillAtBottom ? 0 : radius
         bottomRightRadius: sheet && root.pillAtBottom ? 0 : radius
-        color: root.colBg
+        color: root.colBar
         border.width: 0
         clip: true
 
@@ -7238,7 +7244,7 @@ PanelWindow {
             opacity: Math.min(1, detachedPanel.height / Math.max(1, root.cornerR * 2))
             // the flare left of the sheet hugs the rail and the sheet's left side
             side: modelData === "left" ? "left" : "right"
-            fill: root.colBg
+            fill: root.colBar
             r: root.cornerR
             sqX: modelData === "left" ? detachedPanel.x - r
                                       : detachedPanel.x + detachedPanel.width
@@ -7303,7 +7309,7 @@ PanelWindow {
         // «до» острова: слева от него, а у боковых кромок — над ним
         side: root.railMode ? (root.pillAtRight ? "left" : "right")
             : root.pillSide ? (root.pillAtLeft ? "right" : "left") : "left"
-        fill: root.colBg
+        fill: root.colBar
         r: root.cornerR
         flip: root.railMode ? root.pillAtBottom : (root.pillSide || root.pillAtBottom)   // PANACEA-LOCAL
         // PANACEA-LOCAL: not rounded any more. Rounding did not close the
@@ -7334,7 +7340,7 @@ PanelWindow {
         side: root.railFull ? (root.pillAtRight ? "left" : "right")
             : root.railFlat ? "left"
             : root.pillSide ? (root.pillAtLeft ? "right" : "left") : "right"
-        fill: root.colBg
+        fill: root.colBar
         r: root.cornerR
         flip: root.railFull || (root.railFlat ? root.pillAtBottom
                                               : !root.pillSide && root.pillAtBottom)   // PANACEA-LOCAL
@@ -7465,7 +7471,7 @@ LazyLoader {
             readonly property real fullW: Math.min(1280, parent.width - 80)
             readonly property real fullH: Math.min(940, parent.height - 80)
 
-            color: root.colBg
+            color: root.colBar
             clip: true
             x: root.keysWindowOpen ? (parent.width - fullW) / 2 : root.pillRectX
             y: root.keysWindowOpen ? (parent.height - fullH) / 2 : root.pillRectY

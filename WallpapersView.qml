@@ -238,7 +238,7 @@ Item {
     // меню читается как развернувшийся остров, а не как отдельное окно.
     Rectangle {
         id: morph
-        color: view.sys.colBg
+        color: view.sys.colBar
         z: -1
         x:      view.open ? 0 : view.sys.pillRectX
         y:      view.open ? 0 : view.sys.pillRectY
